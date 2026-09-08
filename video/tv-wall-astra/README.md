@@ -1,6 +1,6 @@
 # Multiverse: Astra TV wall
 
-Independent 10-second internal concept film. One cinematic player pulls back through a wall of 459 placed televisions. Surrounding screens fade to reveal an M built from the remaining TVs. The MULTIVERSE lockup holds from 8.5 to 10 seconds while the footage keeps moving.
+Independent 10-second internal concept film. One cinematic player pulls back through a wall of 459 placed televisions. Surrounding screens fade to reveal an M built from the remaining TVs. The “Multiverse: Your Desktop. Forkable” lockup holds from 8.5 to 10 seconds while the footage keeps moving.
 
 ## Playback and rendering
 

@@ -54,8 +54,8 @@ function draw(t){
  ctx.restore();
  // Optical falloff, then the title on an uncluttered final plane.
  const vignette=ctx.createRadialGradient(960,510,350,960,510,1180);vignette.addColorStop(0,'#0000');vignette.addColorStop(1,'#0009');ctx.fillStyle=vignette;ctx.fillRect(0,0,1920,1080);
- ctx.globalAlpha=smooth((t-7.65)/.85);ctx.textAlign='center';ctx.font='650 108px Geist';ctx.fillStyle='#f3f7ff';ctx.shadowColor='#92c8ff55';ctx.shadowBlur=32;ctx.fillText('MULTIVERSE',960,826);ctx.shadowBlur=0;
- ctx.font='400 22px Geist';ctx.letterSpacing='7px';ctx.fillStyle='#a3b2cc';ctx.fillText('EVERY SCREEN. ANOTHER POSSIBILITY.',960,879);ctx.letterSpacing='0px';ctx.textAlign='left';ctx.globalAlpha=1;
+ ctx.globalAlpha=smooth((t-7.65)/.85);ctx.textAlign='center';ctx.font='650 108px Geist';ctx.fillStyle='#f3f7ff';ctx.shadowColor='#92c8ff55';ctx.shadowBlur=32;ctx.fillText('Multiverse:',960,826);ctx.shadowBlur=0;
+ ctx.font='400 42px Geist';ctx.letterSpacing='0px';ctx.fillStyle='#a3b2cc';ctx.fillText('Your Desktop. Forkable',960,889);ctx.letterSpacing='0px';ctx.textAlign='left';ctx.globalAlpha=1;
 }
 async function seekAsync(t){
  await Promise.all(videos.map(v=>new Promise((resolve,reject)=>{const target=Math.min(t,Math.max(0,v.duration-.06));if(Math.abs(v.currentTime-target)<.002&&v.readyState>=2)return resolve();const timeout=setTimeout(()=>reject(new Error(`Seek timed out: ${v.src}`)),10000);v.addEventListener('seeked',()=>{clearTimeout(timeout);resolve();},{once:true});v.currentTime=target;})));
