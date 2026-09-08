@@ -1,0 +1,220 @@
+{
+  "library": "3d-force-graph",
+  "version": "1.80.0",
+  "source": "https://github.com/vasturiano/3d-force-graph",
+  "file": "3d-force-graph-1.80.0.min.js",
+  "sha256": "d96e738edcca580edd524730c1c6b05ed2efce028c23ca95db1bf43033a72e42",
+  "bundling": "Upstream prebuilt standalone UMD distribution. Dependencies below record the resolved npm tree; no runtime network imports.",
+  "packages": [
+    {
+      "name": "3d-force-graph",
+      "version": "1.80.0",
+      "license": "MIT",
+      "integrity": "sha512-tzI353gW1nXPpnC7VTa3JjMg+3cp77qOLUFO0vucPTfF+q5R6sQsNsIqVTbRIb7RSypn14nBa4yfkOe9ThxASw=="
+    },
+    {
+      "name": "@babel/runtime",
+      "version": "7.29.7",
+      "license": "MIT",
+      "integrity": "sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw=="
+    },
+    {
+      "name": "@tweenjs/tween.js",
+      "version": "25.0.0",
+      "license": "MIT",
+      "integrity": "sha512-XKLA6syeBUaPzx4j3qwMqzzq+V4uo72BnlbOjmuljLrRqdsd3qnzvZZoxvMHZ23ndsRS4aufU6JOZYpCbU6T1A=="
+    },
+    {
+      "name": "accessor-fn",
+      "version": "1.5.3",
+      "license": "MIT",
+      "integrity": "sha512-rkAofCwe/FvYFUlMB0v0gWmhqtfAtV1IUkdPbfhTUyYniu5LrC0A0UJkTH0Jv3S8SvwkmfuAlY+mQIJATdocMA=="
+    },
+    {
+      "name": "d3-array",
+      "version": "3.2.4",
+      "license": "ISC",
+      "integrity": "sha512-tdQAmyA18i4J7wprpYq8ClcxZy3SC31QMeByyCFyRt7BVHdREQZ5lpzoe5mFEYZUWe+oq8HBvk9JjpibyEV4Jg=="
+    },
+    {
+      "name": "d3-binarytree",
+      "version": "1.0.2",
+      "license": "MIT",
+      "integrity": "sha512-cElUNH+sHu95L04m92pG73t2MEJXKu+GeKUN1TJkFsu93E5W8E9Sc3kHEGJKgenGvj19m6upSn2EunvMgMD2Yw=="
+    },
+    {
+      "name": "d3-color",
+      "version": "3.1.0",
+      "license": "ISC",
+      "integrity": "sha512-zg/chbXyeBtMQ1LbD/WSoW2DpC3I0mpmPdW+ynRTj/x2DAWYrIY7qeZIHidozwV24m4iavr15lNwIwLxRmOxhA=="
+    },
+    {
+      "name": "d3-dispatch",
+      "version": "3.0.1",
+      "license": "ISC",
+      "integrity": "sha512-rzUyPU/S7rwUflMyLc1ETDeBj0NRuHKKAcvukozwhshr6g6c5d8zh4c2gQjY2bZ0dXeGLWc1PF174P2tVvKhfg=="
+    },
+    {
+      "name": "d3-force-3d",
+      "version": "3.0.6",
+      "license": "MIT",
+      "integrity": "sha512-4tsKHUPLOVkyfEffZo1v6sFHvGFwAIIjt/W8IThbp08DYAsXZck+2pSHEG5W1+gQgEvFLdZkYvmJAbRM2EzMnA=="
+    },
+    {
+      "name": "d3-format",
+      "version": "3.1.2",
+      "license": "ISC",
+      "integrity": "sha512-AJDdYOdnyRDV5b6ArilzCPPwc1ejkHcoyFarqlPqT7zRYjhavcT3uSrqcMvsgh2CgoPbK3RCwyHaVyxYcP2Arg=="
+    },
+    {
+      "name": "d3-interpolate",
+      "version": "3.0.1",
+      "license": "ISC",
+      "integrity": "sha512-3bYs1rOD33uo8aqJfKP3JWPAibgw8Zm2+L9vBKEHJ2Rg+viTR7o5Mmv5mZcieN+FRYaAOWX5SJATX6k1PWz72g=="
+    },
+    {
+      "name": "d3-octree",
+      "version": "1.1.0",
+      "license": "MIT",
+      "integrity": "sha512-F8gPlqpP+HwRPMO/8uOu5wjH110+6q4cgJvgJT6vlpy3BEaDIKlTZrgHKZSp/i1InRpVfh4puY/kvL6MxK930A=="
+    },
+    {
+      "name": "d3-quadtree",
+      "version": "3.0.1",
+      "license": "ISC",
+      "integrity": "sha512-04xDrxQTDTCFwP5H6hRhsRcb9xxv2RzkcsygFzmkSIOJy3PeRJP7sNk3VRIbKXcog561P9oU0/rVH6vDROAgUw=="
+    },
+    {
+      "name": "d3-scale",
+      "version": "4.0.2",
+      "license": "ISC",
+      "integrity": "sha512-GZW464g1SH7ag3Y7hXjf8RoUuAFIqklOAq3MRl4OaWabTFJY9PN/E1YklhXLh+OQ3fM9yS2nOkCoS+WLZ6kvxQ=="
+    },
+    {
+      "name": "d3-scale-chromatic",
+      "version": "3.1.0",
+      "license": "ISC",
+      "integrity": "sha512-A3s5PWiZ9YCXFye1o246KoscMWqf8BsD9eRiJ3He7C9OBaxKhAd5TFCdEx/7VbKtxxTsu//1mMJFrEt572cEyQ=="
+    },
+    {
+      "name": "d3-selection",
+      "version": "3.0.0",
+      "license": "ISC",
+      "integrity": "sha512-fmTRWbNMmsmWq6xJV8D19U/gw/bwrHfNXxrIN+HfZgnzqTHp9jOmKMhsTUjXOJnZOdZY9Q28y4yebKzqDKlxlQ=="
+    },
+    {
+      "name": "d3-time",
+      "version": "3.1.0",
+      "license": "ISC",
+      "integrity": "sha512-VqKjzBLejbSMT4IgbmVgDjpkYrNWUYJnbCGo874u7MMKIWsILRX+OpX/gTk8MqjpT1A/c6HY2dCA77ZN0lkQ2Q=="
+    },
+    {
+      "name": "d3-time-format",
+      "version": "4.1.0",
+      "license": "ISC",
+      "integrity": "sha512-dJxPBlzC7NugB2PDLwo9Q8JiTR3M3e4/XANkreKSUxF8vvXKqm1Yfq4Q5dl8budlunRVlUUaDUgFt7eA8D6NLg=="
+    },
+    {
+      "name": "d3-timer",
+      "version": "3.0.1",
+      "license": "ISC",
+      "integrity": "sha512-ndfJ/JxxMd3nw31uyKoY2naivF+r29V+Lc0svZxe1JvvIRmi8hUsrMvdOwgS1o6uBHmiz91geQ0ylPP0aj1VUA=="
+    },
+    {
+      "name": "data-bind-mapper",
+      "version": "1.0.3",
+      "license": "MIT",
+      "integrity": "sha512-QmU3lyEnbENQPo0M1F9BMu4s6cqNNp8iJA+b/HP2sSb7pf3dxwF3+EP1eO69rwBfH9kFJ1apmzrtogAmVt2/Xw=="
+    },
+    {
+      "name": "float-tooltip",
+      "version": "1.7.5",
+      "license": "MIT",
+      "integrity": "sha512-/kXzuDnnBqyyWyhDMH7+PfP8J/oXiAavGzcRxASOMRHFuReDtofizLLJsf7nnDLAfEaMW4pVWaXrAjtnglpEkg=="
+    },
+    {
+      "name": "internmap",
+      "version": "2.0.3",
+      "license": "ISC",
+      "integrity": "sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg=="
+    },
+    {
+      "name": "kapsule",
+      "version": "1.16.3",
+      "license": "MIT",
+      "integrity": "sha512-4+5mNNf4vZDSwPhKprKwz3330iisPrb08JyMgbsdFrimBCKNHecua/WBwvVg3n7vwx0C1ARjfhwIpbrbd9n5wg=="
+    },
+    {
+      "name": "lodash-es",
+      "version": "4.18.1",
+      "license": "MIT",
+      "integrity": "sha512-J8xewKD/Gk22OZbhpOVSwcs60zhd95ESDwezOFuA3/099925PdHJ7OFHNTGtajL3AlZkykD32HykiMo+BIBI8A=="
+    },
+    {
+      "name": "ngraph.events",
+      "version": "1.4.0",
+      "license": "BSD-3-Clause",
+      "integrity": "sha512-NeDGI4DSyjBNBRtA86222JoYietsmCXbs8CEB0dZ51Xeh4lhVl1y3wpWLumczvnha8sFQIW4E0vvVWwgmX2mGw=="
+    },
+    {
+      "name": "ngraph.forcelayout",
+      "version": "3.3.1",
+      "license": "BSD-3-Clause",
+      "integrity": "sha512-MKBuEh1wujyQHFTW57y5vd/uuEOK0XfXYxm3lC7kktjJLRdt/KEKEknyOlc6tjXflqBKEuYBBcu7Ax5VY+S6aw=="
+    },
+    {
+      "name": "ngraph.graph",
+      "version": "20.1.2",
+      "license": "BSD-3-Clause",
+      "integrity": "sha512-W/G3GBR3Y5UxMLHTUCPP9v+pbtpzwuAEIqP5oZV+9IwgxAIEZwh+Foc60iPc1idlnK7Zxu0p3puxAyNmDvBd0Q=="
+    },
+    {
+      "name": "ngraph.merge",
+      "version": "1.0.0",
+      "license": "MIT",
+      "integrity": "sha512-5J8YjGITUJeapsomtTALYsw7rFveYkM+lBj3QiYZ79EymQcuri65Nw3knQtFxQBU1r5iOaVRXrSwMENUPK62Vg=="
+    },
+    {
+      "name": "ngraph.random",
+      "version": "1.2.0",
+      "license": "BSD-3-Clause",
+      "integrity": "sha512-4EUeAGbB2HWX9njd6bP6tciN6ByJfoaAvmVL9QTaZSeXrW46eNGA9GajiXiPBbvFqxUWFkEbyo6x5qsACUuVfA=="
+    },
+    {
+      "name": "polished",
+      "version": "4.3.1",
+      "license": "MIT",
+      "integrity": "sha512-OBatVyC/N7SCW/FaDHrSd+vn0o5cS855TOmYi4OkdWUMSJCET/xip//ch8xGUvtr3i44X9LVyWwQlRMTN3pwSA=="
+    },
+    {
+      "name": "preact",
+      "version": "10.29.8",
+      "license": "MIT",
+      "integrity": "sha512-ej2aVZ+vZ8WO7tvlQWRM9N63A0KzF9q4mWJfDUHgYaIofWY9hu74QdnQrjoPMmZi2/nZ5gN0bJCQF49xQqx09Q=="
+    },
+    {
+      "name": "three",
+      "version": "0.186.0",
+      "license": "MIT",
+      "integrity": "sha512-cr/fIM2ddMSVbYVgkfD4jLJv7Fh/8ZTjvo+7gQeSVGUZHxpx9FDwoL5iC7hUz/LiRA8wMbqfnb90xKfm1/HHkQ=="
+    },
+    {
+      "name": "three-forcegraph",
+      "version": "1.43.4",
+      "license": "MIT",
+      "integrity": "sha512-FtmiZP/T16ZQaHza3JDaDn0YTXFtg9e7pGnTeU8nzu0NNkx7MpWbF/GvmpbQsWHx3rukHtkRv1fTorLPB3FDEA=="
+    },
+    {
+      "name": "three-render-objects",
+      "version": "1.42.0",
+      "license": "MIT",
+      "integrity": "sha512-KYfkPrYGEbIK8ChFocWqOF1aAN80FBUBWVYB8mB2oBpVuVN+52FvvngVYB5ieFANQu7Rt21rPYZ/xKaAgVWWRQ=="
+    },
+    {
+      "name": "tinycolor2",
+      "version": "1.6.0",
+      "license": "MIT",
+      "integrity": "sha512-XPaBkWQJdsf3pLKJV9p4qN/S+fm2Oj8AIPo1BTUhg5oxkvm9+SVEGFdhyOz7tTdUTfvxMiAs4sp6/eZO2Ew+pw=="
+    }
+  ]
+}

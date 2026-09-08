@@ -2,6 +2,10 @@
 # Reopens tabs from /state/tabs.json: {"tabs":[{"url":"https://...","active":true}, ...]}
 set -u
 [ -f /state/tabs.json ] || exit 0
+if [ -n "${FORK_OSWORLD_TASK:-}" ] && [ -f /state/browser-storage.json ]; then
+  node /opt/fork/osworld/restore-browser.js || exit 1
+  exit 0
+fi
 n=$(jq '.tabs | length' /state/tabs.json); [ "$n" -gt 0 ] || exit 0
 # Close the initial blank tab only after at least one restored tab exists.
 first=$(curl -s http://127.0.0.1:9222/json | jq -r '.[0].id')
