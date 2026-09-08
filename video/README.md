@@ -1,4 +1,6 @@
-# Multiverse: one-minute first cut
+# Multiverse: one-minute demo
+
+Revision 2: your desktop and your saved work lead the story. A short technical beat connects screenshots and interface trees to clicks, keystrokes, code, and checked outcomes. Branch trails, staggered desktop entrances, replay highlights, a rewind reveal, and sound accents add motion without changing the captured product evidence.
 
 60 seconds, 1920 × 1080, 30 fps. Internal demo built with Slancha Studio’s deterministic HTML capture workflow.
 
@@ -11,8 +13,8 @@ The film uses real Debian container forks, native Inkscape screenshots, a live d
 With the captured assets present and the studio Playwright environment available:
 
 ```sh
-node video/capture.mjs . --out "$PWD/video/output/silent.mp4"
-ffmpeg -y -i video/output/silent.mp4 -i video/assets/mix.wav -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -t 60 -movflags +faststart video/output/Multiverse-demo-v1.mp4
+node video/capture.mjs . --out "$PWD/video/output/v2-silent.mp4"
+ffmpeg -y -i video/output/v2-silent.mp4 -i video/assets/v2-final-mix.wav -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -t 60 -movflags +faststart video/output/Multiverse-demo-v2.mp4
 ```
 
 `script.json` contains narration; `scene.js` drives every frame through `hf-seek`. Capture assets are intentionally kept out of Git. This is a first cut for review, not a claim of autonomous model performance.

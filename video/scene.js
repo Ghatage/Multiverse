@@ -21,7 +21,49 @@ for(const n of nodes){const p=positions.get(n.id);svgEl('circle',{cx:p.x,cy:p.y,
 for(const id of ['hero-graph','end-graph']){const g=document.getElementById(id);for(let i=0;i<nodes.length;i++){const a=i*2.399;const r=120+i*28;const x=1380+Math.cos(a)*r,y=490+Math.sin(a)*r;svgEl('path',{d:`M1380 490Q${x+80} ${y-100} ${x} ${y}`,fill:'none',stroke:i%2?'#74998e':'#6f588a','stroke-width':2},g);svgEl('circle',{cx:x,cy:y,r:12+i%3*5,fill:i%2?'#75aa96':'#9775b8'},g);}}
 const beats=timeline.map((_,i)=>document.getElementById('s'+i));
 const labels=['INTRO','BRANCH','PARALLEL','STATE SPACE','REPLAY','REWIND','MULTIVERSE'];
-function paint(t){let index=timeline.findIndex(s=>t>=s.start&&t<s.end);if(index<0)index=6;for(let i=0;i<beats.length;i++){const b=beats[i],s=timeline[i],local=t-s.start;const vis=i===index?1:0;b.style.display=vis?'block':'none';if(vis){b.style.opacity=Math.max(.1,easeOut(clamp01(local/.35)));const head=b.querySelector('h1,h2');head.style.transform=`translateY(${18*(1-easeOut(clamp01(local/.65)))}px)`;for(const [j,p]of [...b.querySelectorAll('article')].entries()){p.style.transform=`translateY(${10*Math.sin(local*.3+j)}px)`;}}}const s=timeline[index],local=t-s.start;document.querySelector('.dashboard-shot').style.opacity=index===3&&local>4?Math.min(1,(local-4)*2):0;document.getElementById('chapter').textContent=labels[index];document.getElementById('progress').style.width=`${t/60*100}%`;const caption=document.getElementById('caption');caption.textContent=t>=s.voice_start&&t<=s.voice_start+s.voice_duration+.25?s.line:'';caption.style.opacity=caption.textContent?1:0;paths.forEach((p,i)=>{p.style.stroke=i<=Math.floor(local*1.1)?'#a991cf':'#504959';});document.getElementById('hero-graph').style.transform=`rotate(${t*.7}deg)`;document.getElementById('end-graph').style.transform=`rotate(${t*.45}deg)`;document.querySelector('.graph-wrap').style.transform=`scale(${1+Math.max(0,local)*.0015})`;}
+const sweep=document.createElement('div');sweep.className='motion-sweep';document.getElementById('stage').prepend(sweep);
+const replaySteps=[...document.querySelectorAll('.steps div')];
+const forkLine=document.querySelector('.fork-lines path');
+const graphPaths=[...document.querySelectorAll('#hero-graph path,#end-graph path')];
+const allPaths=[...paths,forkLine,...graphPaths];
+const lengths=new Map(allPaths.map(p=>[p,p.getTotalLength()]));
+function draw(p,progress){const length=lengths.get(p);p.style.strokeDasharray=String(length);p.style.strokeDashoffset=String(length*(1-clamp01(progress)));}
+function paint(t){
+  let index=timeline.findIndex(s=>t>=s.start&&t<s.end);if(index<0)index=6;
+  const s=timeline[index],local=t-s.start;
+  for(let i=0;i<beats.length;i++){
+    const b=beats[i];b.style.display=i===index?'block':'none';
+    if(i!==index)continue;
+    const enter=easeOut(clamp01(local/.65));
+    b.style.opacity=Math.max(.1,enter);
+    const head=b.querySelector('h1,h2');head.style.transform=`translateY(${42*(1-enter)}px) scale(${.97+.03*enter})`;head.style.transformOrigin='left center';
+    for(const [j,p]of [...b.querySelectorAll('article')].entries()){
+      const reveal=easeOut(clamp01((local-.3-j*.22)/1.05));
+      const side=j===0?-1:1;
+      p.style.opacity=String(reveal);
+      p.style.transform=`translateX(${side*180*(1-reveal)}px) translateY(${5*Math.sin(local*.7+j)}px) rotateY(${-side*12*(1-reveal)}deg) scale(${.92+.08*reveal})`;
+      const badge=p.querySelector('.ok,.bad');if(badge)badge.style.opacity=String(clamp01((local-2.6-j*.3)/.4));
+      if(index===5&&j===1)p.style.clipPath=`inset(0 0 0 ${100*(1-easeOut(clamp01((local-1.8)/1.2)))}%)`;
+    }
+  }
+  sweep.style.transform=`translateX(${(local*.12%1)*1920}px)`;sweep.style.opacity=String(.15+.2*Math.sin(local*.8)**2);
+  document.querySelector('.dashboard-shot').style.opacity=index===3&&local>4?Math.min(1,(local-4)*2):0;
+  document.getElementById('chapter').textContent=labels[index];
+  document.getElementById('progress').style.width=`${t/60*100}%`;
+  const caption=document.getElementById('caption');caption.textContent=t>=s.voice_start&&t<=s.voice_start+s.voice_duration+.25?s.line:'';caption.style.opacity=caption.textContent?1:0;
+  paths.forEach((p,i)=>{draw(p,(local-.2-i*.18)/1.1);p.style.stroke='#b69ae2';});
+  draw(forkLine,(local-.45)/1.2);
+  graphPaths.forEach((p,i)=>draw(p,(local-.1-(i%9)*.10)/1.6));
+  for(const id of ['hero-graph','end-graph']){
+    const g=document.getElementById(id);g.style.transform=`rotate(${local*1.7-5}deg) scale(${.94+local*.009})`;
+    [...g.querySelectorAll('circle')].forEach((p,i)=>{p.style.opacity=String(clamp01((local-.3-i*.1)/.6));p.style.filter=`drop-shadow(0 0 ${8+5*Math.sin(local*1.6+i)}px #bda2ff)`;});
+  }
+  replaySteps.forEach((p,i)=>{
+    const active=local>.6+i*.9;p.style.borderColor=active?'#92d6bf':'#42404d';p.style.boxShadow=active?'0 0 30px #81cdb221':'none';
+    p.style.transform=`translateY(${16*(1-easeOut(clamp01((local-i*.18)/.7)))}px)`;
+  });
+  document.querySelector('.graph-wrap').style.transform=`scale(${1+Math.max(0,local)*.002})`;
+}
 const clock=new Clock({duration:60,fps:30,onSeek:paint}).expose();
 const fit=()=>document.getElementById('stage').style.transform=`scale(${Math.min(innerWidth/1920,innerHeight/1080)})`;addEventListener('resize',fit);fit();
 await document.fonts.ready;await Promise.all([...document.images].map(i=>i.decode()));await clock.warmup();window.__ready=true;clock.play();
