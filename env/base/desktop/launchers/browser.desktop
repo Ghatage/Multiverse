@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Chrome
+Icon=chromium
+Exec=/opt/fork/desktop/browser.sh
+Terminal=false

@@ -1,0 +1,45 @@
+# Local credentials and generated trust material
+.env
+.env.*
+!.env.example
+env/proxy/
+
+# Runtime state and build artifacts
+data/
+runs/
+*.sqlite
+*.sqlite-*
+*.log
+*.pid
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+.uv/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Development-only material retained locally
+README.md
+AGENTS.md
+plans/
+tasks/
+docs/
+tests/
+env/fixtures/
+env/testapp/
+env/scripts/doctor.sh
+env/scripts/ratelimit_probe.py
+env/base/aria-check.js
+env/base/wait-healthy.sh
+scripts/build_log.py
+
+# Accidental nested repository
+/git@github.com:Ghatage/
+
+# Editor and operating system state
+.DS_Store
+.idea/
+.vscode/

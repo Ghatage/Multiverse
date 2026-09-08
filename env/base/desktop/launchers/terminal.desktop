@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Terminal
+Icon=utilities-terminal
+Exec=xterm -bg "#202638" -fg "#e9edf5" -fa Monospace -fs 12
+Terminal=false

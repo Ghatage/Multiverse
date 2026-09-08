@@ -1,0 +1,9 @@
+.env
+.env.*
+.venv
+.git
+data
+runs
+**/__pycache__
+env/proxy/*
+!env/proxy/mitmproxy-ca-cert.pem
