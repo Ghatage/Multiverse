@@ -42,6 +42,7 @@ def run(
     repl_url: str | None = None,
     seed: int | None = None,
     judge: bool = False,
+    mode: str | None = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ):
     load_dotenv()
@@ -68,6 +69,7 @@ def run(
             policy,
             transport=tx,
             repl_url=repl_url,
+            mode=mode,
             seed=seed,
             judge=judge,
             progress=None

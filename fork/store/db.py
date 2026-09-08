@@ -271,7 +271,7 @@ class Store:
         *,
         action_ids: Sequence[str] = (),
     ) -> str:
-        if tool not in {"exec_js", "exec_py"}:
+        if tool not in {"exec_js", "exec_py", "act"}:
             raise ValueError("Only executable tools become edges")
         from fork.store.actions import link_actions
 

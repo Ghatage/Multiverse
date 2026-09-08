@@ -55,3 +55,9 @@ CREATE TABLE IF NOT EXISTS checkpoint_candidates (
 CREATE TABLE IF NOT EXISTS template_cache (
  code_sha TEXT NOT NULL, context_sha TEXT NOT NULL, result_json TEXT NOT NULL,
  created TEXT NOT NULL, PRIMARY KEY(code_sha,context_sha));
+CREATE TABLE IF NOT EXISTS recoveries (
+ id INTEGER PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id),
+ checkpoint_id TEXT NOT NULL REFERENCES checkpoints(id),
+ old_incarnation TEXT NOT NULL, new_incarnation TEXT NOT NULL,
+ evidence_json TEXT NOT NULL, created TEXT NOT NULL,
+ UNIQUE(run_id,new_incarnation));

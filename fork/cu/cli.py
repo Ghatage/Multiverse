@@ -14,6 +14,7 @@ from rich.table import Table
 
 from fork.cu import branch as manager
 from fork.cu import db
+from fork.repl_client import ReplError
 
 load_dotenv()
 app = typer.Typer(no_args_is_help=True)
@@ -63,7 +64,7 @@ def output(value: Any, as_json: bool) -> None:
 def invoke(as_json: bool, action: Callable, *args, **kwargs) -> None:
     try:
         result = action(*args, **kwargs)
-    except (ValueError, RuntimeError, OSError) as exc:
+    except (ValueError, RuntimeError, OSError, ReplError) as exc:
         payload = {"error": str(exc)}
         if isinstance(exc, manager.ForkError):
             payload.update(branches=exc.branches, errors=exc.errors)
@@ -133,6 +134,13 @@ def diff(
     json_output: Json = False,
 ):
     invoke(json_output, manager.diff, name, other)
+
+
+@app.command("recover")
+def recover(action_id: str, boundary: str = "pre", json_output: Json = False):
+    from fork.mutations.recovery import recover_action
+
+    invoke(json_output, recover_action, action_id, boundary)
 
 
 @app.command("merge")

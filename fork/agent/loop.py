@@ -20,7 +20,7 @@ from fork.agent.tools import TOOLS, ToolExecutor
 from fork.agent.transport import TransportError, WallTimeout, WsTransport
 from fork.cu import db
 from fork.locks import validate_name
-from fork.repl_client import ReplClient
+from fork.repl_client import ReplClient, ReplError
 
 
 class StopRun(Exception):
@@ -101,8 +101,13 @@ def run_task(
     judge: bool = False,
     judge_runner=None,
     store=None,
+    mode: str | None = None,
 ) -> dict:
     validate_name(branch)
+    if mode is not None:
+        from fork.replay.executor import ReplayHooks
+
+        hooks = ReplayHooks(mode)
     if effort not in {"low", "medium", "high", "xhigh", "max"}:
         raise ValueError("Invalid reasoning effort")
     if os.environ.get("FORK_MODEL", "gpt-6-astra") != "gpt-6-astra":
@@ -164,13 +169,24 @@ def run_task(
             raise StopRun("raced_out")
         if time.monotonic() >= deadline:
             raise StopRun("wall_cap")
+        if (
+            mode is not None
+            and hooks.repair_started
+            and time.monotonic()
+            >= hooks.repair_started[0] + hooks.config.repair_max_wall_s
+        ):
+            raise StopRun("repair_wall_cap")
         if log.cost_usd + (judges.reserved_usd if judges else 0) >= caps.max_cost_usd:
             raise StopRun("cost_cap")
         if log.turns >= caps.max_turns:
             raise StopRun("turn_cap")
         if container_id is not None:
             current = db.get_branch(branch, include_removed=True)
-            if current.container_id != container_id or current.status != "healthy":
+            expected_incarnation = getattr(hooks, "incarnation", None) or container_id
+            if (
+                current.container_id != expected_incarnation
+                or current.status != "healthy"
+            ):
                 raise StopRun("rewound")
 
     if isinstance(tx, WsTransport):
@@ -207,15 +223,23 @@ def run_task(
             before = len(accounted)
             delivery_turn = log.turns + 1
             try:
+                request_deadline = deadline
+                if mode is not None and hooks.repair_started:
+                    request_deadline = min(
+                        deadline,
+                        hooks.repair_started[0] + hooks.config.repair_max_wall_s,
+                    )
                 response = tx.create(
-                    timeout_s=max(0.001, deadline - time.monotonic()), **body
+                    timeout_s=max(0.001, request_deadline - time.monotonic()), **body
                 )
                 account(response)
                 if judges:
                     judges.delivered(body["input"], delivery_turn)
                 return response
             except WallTimeout:
-                raise StopRun("wall_cap") from None
+                raise StopRun(
+                    "repair_wall_cap" if request_deadline < deadline else "wall_cap"
+                ) from None
             except TransportError as exc:
                 if time.monotonic() >= deadline:
                     raise StopRun("wall_cap") from exc
@@ -245,17 +269,33 @@ def run_task(
                 log.model_calls += max(0, len(accounted) - before - 1)
         raise AssertionError("Retry loop exhausted")
 
+    def mutation_budget():
+        budget()
+        if executor is not None:
+            collect_steers()
+            if queued_steers:
+                raise ValueError(
+                    "Operator steering arrived; completed actions were retained and the batch suffix was discarded"
+                )
+
     def body(previous, inp, *, summarize=False) -> dict:
         result = {
             "model": "gpt-6-astra",
             "stream_id": branch,
             "store": False,
-            "instructions": SYSTEM
+            "instructions": (getattr(hooks, "instructions", SYSTEM))
             + ("\n" + extra_instructions if extra_instructions else ""),
-            "tools": [] if summarize else [*TOOLS, *([JUDGE_TOOL] if judge else [])],
+            "tools": []
+            if summarize
+            else [*getattr(hooks, "tools", TOOLS), *([JUDGE_TOOL] if judge else [])],
             "tool_choice": "none" if summarize else "auto",
             "parallel_tool_calls": False,
-            "reasoning": {"effort": "low" if summarize else effort, "summary": "auto"},
+            "reasoning": {
+                "effort": "low"
+                if summarize
+                else ("medium" if getattr(hooks, "repairing", False) else effort),
+                "summary": "auto",
+            },
             "max_output_tokens": 1000 if summarize else 16000,
             "input": inp,
         }
@@ -278,27 +318,54 @@ def run_task(
                 from fork.store.db import Store
 
                 store = store or Store(artifact_root=log.path.parent)
-                store.record_run(log.run_id, task["id"], branch, "cold", effort)
-            executor = ToolExecutor(
-                branch,
-                repl,
-                policy,
-                log,
-                gate,
-                approval_waiter,
-                task["prompt"],
-                deadline,
-                store=store if store is not False else None,
-            )
-            initial = executor.execute(
-                {
-                    "name": "exec_js",
-                    "call_id": "bootstrap",
-                    "arguments": json.dumps(
-                        {"code": f"await page.goto({json.dumps(task['start_url'])})"}
+                store.record_run(
+                    log.run_id,
+                    task["id"],
+                    branch,
+                    "warm" if mode in {"warm", "auto"} else "cold",
+                    effort,
+                )
+            if mode is not None:
+                if store is False:
+                    raise ValueError(
+                        "Checkpointed execution requires the trajectory store"
+                    )
+                executor = hooks.bind(
+                    branch,
+                    task,
+                    log,
+                    store,
+                    policy,
+                    mutation_budget,
+                    lambda: (
+                        checker(task, branch) if checker else check_task(task, branch)
                     ),
-                }
-            )
+                    deadline=deadline,
+                )
+                initial = hooks.bootstrap()
+            else:
+                executor = ToolExecutor(
+                    branch,
+                    repl,
+                    policy,
+                    log,
+                    gate,
+                    approval_waiter,
+                    task["prompt"],
+                    deadline,
+                    store=store if store is not False else None,
+                )
+                initial = executor.execute(
+                    {
+                        "name": "exec_js",
+                        "call_id": "bootstrap",
+                        "arguments": json.dumps(
+                            {
+                                "code": f"await page.goto({json.dumps(task['start_url'])})"
+                            }
+                        ),
+                    }
+                )
             if hooks:
                 hooks.on_run_start(branch)
             inp = [
@@ -317,6 +384,42 @@ def run_task(
                     inp.extend(judges.drain())
                 budget()
                 inp.extend(steer_input())
+                if mode is not None:
+                    if steering_history:
+                        hooks.path = []
+                    decision = hooks.before_model_turn()
+                    if decision and decision.get("complete"):
+                        reason = "final_answer"
+                        text = "Task verified from the recorded path."
+                        break
+                    if decision and decision.get("replayed"):
+                        inp.append(
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "input_text",
+                                        "text": "A cached action batch completed. Current state:",
+                                    },
+                                    *decision["output"],
+                                ],
+                            }
+                        )
+                        continue
+                    if decision and decision.get("reset"):
+                        tx.reset()
+                        if judges:
+                            judges.reset()
+                        previous = None
+                        inp = [
+                            {
+                                "role": "user",
+                                "content": task["prompt"]
+                                + "\n"
+                                + hooks.repair_prompt()
+                                + steering_context(),
+                            }
+                        ]
                 try:
                     response = request(body(previous, inp))
                 except TransportError as exc:
@@ -412,7 +515,8 @@ def run_task(
                     if container_id is not None:
                         current = db.get_branch(branch, include_removed=True)
                         if (
-                            current.container_id != container_id
+                            current.container_id
+                            != (getattr(hooks, "incarnation", None) or container_id)
                             or current.status != "healthy"
                         ):
                             raise StopRun("rewound")
@@ -532,22 +636,46 @@ def run_task(
         TypeError,
         AttributeError,
         sqlite3.Error,
+        ReplError,
     ) as exc:
         error = f"{type(exc).__name__}: {exc}"
         reason = "error"
     finally:
+        if mode is not None and getattr(hooks, "coordinator", None):
+            try:
+                hooks.coordinator.__exit__(None, None, None)
+            except (RuntimeError, OSError, ReplError) as exc:
+                reason = "error"
+                error = (
+                    f"Mutation ownership cleanup failed: {type(exc).__name__}: {exc}"
+                )
         if owns_repl and repl is not None:
             repl.close()
     try:
         result = checker(task, branch) if checker else check_task(task, branch)
     except Exception as exc:  # noqa: BLE001 - persist summary when an injected checker fails
         result = {"pass": False, "errors": [f"Checker failed: {type(exc).__name__}"]}
-    summary = log.finish(reason, text=text, checker=result, error=error)
+    extra = {"mode": "warm" if mode in {"warm", "auto"} else "cold"}
+    if mode is not None and getattr(hooks, "coordinator", None):
+        detail = {"stop_reason": reason, "checker": result}
+        try:
+            hooks.finish(detail)
+            extra.update(
+                {k: v for k, v in detail.items() if k not in {"stop_reason", "checker"}}
+            )
+        except (ValueError, RuntimeError, OSError, sqlite3.Error, ReplError) as exc:
+            reason = "error"
+            error = f"Replay finalization failed: {type(exc).__name__}: {exc}"
+    summary = log.finish(reason, text=text, checker=result, error=error, extra=extra)
     if store not in (None, False):
         from fork.store.ingest import ingest_run
 
         try:
             ingest_run(store, log.path)
+            if mode is not None:
+                from fork.replay.metrics import refresh
+
+                refresh(store)
         except (ValueError, RuntimeError, OSError, sqlite3.Error) as exc:
             summary["store_error"] = f"{type(exc).__name__}: {exc}"
             (log.path / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")

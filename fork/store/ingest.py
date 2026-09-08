@@ -130,7 +130,7 @@ def ingest_run(
                     a = store.node_for(before)[0] if before else None
                     b = store.node_for(after)[0] if after else None
                 actions = _call_actions(con, run_id, record)
-                if record.get("tool") in {"exec_js", "exec_py"}:
+                if record.get("tool") in {"exec_js", "exec_py", "act"}:
                     mutations += 1
                     covered += actions is not None
                 if actions is not None:
@@ -144,7 +144,7 @@ def ingest_run(
                     and before is not None
                     and after is not None
                 )
-                if ok and record.get("tool") in {"exec_js", "exec_py"}:
+                if ok and record.get("tool") in {"exec_js", "exec_py", "act"}:
                     norm_a, norm_b = normalise(before), normalise(after)
                     if norm_a.app == norm_b.app:
                         edge = store.upsert_edge(
@@ -208,6 +208,9 @@ def ingest_run(
                 cost_usd=summary.get("cost_usd", 0),
                 wall_s=summary.get("wall_s", 0),
                 checker_pass=summary.get("checker", {}).get("pass"),
+                cache_hits=summary.get("cache", {}).get("hits", 0),
+                cache_misses=summary.get("cache", {}).get("misses", 0),
+                repairs=summary.get("repairs", 0),
                 ingest_sha=digest,
                 checkpoint_coverage=coverage,
             )

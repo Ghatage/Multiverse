@@ -7,7 +7,12 @@ log(){ echo "[entry $(date +%T.%N | cut -c1-12)] $*"; }
 rm -f /tmp/ready /tmp/.X1-lock /tmp/.X11-unix/X1 /home/user/chrome/Singleton*
 touch /home/user/.Xauthority
 # 1. X server
-Xvnc :1 -geometry "$GEOM" -depth 24 -SecurityTypes None -rfbport 5901 -AlwaysShared -desktop "fork:${FORK_BRANCH:-base}" \
+INPUT_FLAGS=()
+if [ -f /opt/fork/repl/input-options.sh ]; then
+  . /opt/fork/repl/input-options.sh
+fi
+Xvnc :1 "${INPUT_FLAGS[@]}" -geometry "$GEOM" -depth 24 -SecurityTypes None -rfbport 5901 -AlwaysShared -desktop "fork:${FORK_BRANCH:-base}" \
+  -AllowOverride desktop,AcceptPointerEvents,AcceptKeyEvents,SendCutText,AcceptCutText,SendPrimary,SetPrimary,AcceptSetDesktopSize \
   >/tmp/xvnc.log 2>&1 &
 for i in $(seq 1 100); do xdpyinfo -display :1 >/dev/null 2>&1 && break; sleep 0.05; done
 log "X up after $i polls"
@@ -36,7 +41,9 @@ for i in $(seq 1 200); do curl -sf http://127.0.0.1:9222/json/version >/dev/null
 log "CDP up after $i polls"
 
 # Chromium CDP listens on loopback; expose it on the container interface.
-node -e 'const net=require("net"),os=require("os");const addr=Object.values(os.networkInterfaces()).flat().find(a=>a.family==="IPv4"&&!a.internal).address;net.createServer(s=>{const c=net.connect(9222,"127.0.0.1");s.pipe(c).pipe(s);c.on("error",()=>s.destroy());s.on("error",()=>c.destroy());}).listen(9222,addr);' >/tmp/cdp-forward.log 2>&1 &
+if [ ! -f /opt/fork/repl/cdp_proxy.js ]; then
+  node -e 'const net=require("net"),os=require("os");const addr=Object.values(os.networkInterfaces()).flat().find(a=>a.family==="IPv4"&&!a.internal).address;net.createServer(s=>{const c=net.connect(9222,"127.0.0.1");s.pipe(c).pipe(s);c.on("error",()=>s.destroy());s.on("error",()=>c.destroy());}).listen(9222,addr);' >/tmp/cdp-forward.log 2>&1 &
+fi
 
 # 5. noVNC
 websockify --web /usr/share/novnc 6080 localhost:5901 >/tmp/novnc.log 2>&1 &
