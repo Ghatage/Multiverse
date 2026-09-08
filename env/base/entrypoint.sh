@@ -56,6 +56,9 @@ fi
 
 # 7. restore sidecar (no-op when /state/tabs.json is absent)
 /opt/fork/restore-tabs.sh || log "restore-tabs failed (non-fatal)"
+if [ -n "${FORK_OSWORLD_TASK:-}" ]; then
+  /opt/fork/osworld/restore-desktop.sh
+fi
 
 echo "{\"branch\":\"${FORK_BRANCH:-base}\",\"booted\":\"$(date -Iseconds)\"}" > /state/meta.json
 log "READY"

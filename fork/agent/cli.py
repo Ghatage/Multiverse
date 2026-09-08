@@ -43,10 +43,20 @@ def run(
     seed: int | None = None,
     judge: bool = False,
     mode: str | None = None,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            help="Continue the current desktop without navigating to start_url."
+        ),
+    ] = False,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ):
     load_dotenv()
     try:
+        if resume and seed is not None:
+            raise ValueError(
+                "--resume cannot be combined with --seed, which resets task state"
+            )
         if transport not in {"ws", "http"}:
             raise ValueError("Transport must be ws or http")
         caps = Caps(max_turns, max_wall_s, max_cost_usd)
@@ -70,6 +80,7 @@ def run(
             transport=tx,
             repl_url=repl_url,
             mode=mode,
+            resume=resume,
             seed=seed,
             judge=judge,
             progress=None

@@ -74,7 +74,12 @@ class ReplayHooks:
                 return [dict(step) for step in steps]
         return []
 
-    def bootstrap(self):
+    def bootstrap(self, *, resume: bool = False):
+        if resume:
+            self.path = []
+            return self.executor.execute(
+                {"name": "observe", "call_id": "resume", "arguments": '{"mode":"both"}'}
+            )
         return self.executor.execute(
             {
                 "name": "act",

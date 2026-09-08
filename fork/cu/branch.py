@@ -35,7 +35,7 @@ def _resolve(source: str | None) -> tuple[str, str | None]:
     ), None
 
 
-def _start(b: db.Branch, timeout: float = 20) -> dict:
+def _start(b: db.Branch, timeout: float = 60) -> dict:
     start = time.monotonic()
     try:
         cid = docker.run(b.name, b.idx, b.image, b.proxy)
