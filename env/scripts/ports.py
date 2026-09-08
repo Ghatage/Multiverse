@@ -18,7 +18,7 @@ def port_block(index: int) -> dict[str, int]:
 
 def docker_publish_args(index: int) -> list[str]:
     p = port_block(index)
-    return [f"-p{p[k]}:{INTERNAL[k]}" for k in INTERNAL]
+    return [f"-p127.0.0.1:{p[k]}:{INTERNAL[k]}" for k in INTERNAL]
 
 
 if __name__ == "__main__":
