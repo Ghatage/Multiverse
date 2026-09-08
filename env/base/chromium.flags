@@ -1,0 +1,14 @@
+--remote-debugging-port=9222
+--remote-debugging-address=0.0.0.0
+--remote-allow-origins=*
+--password-store=basic
+--user-data-dir=/home/user/chrome
+--no-first-run
+--no-default-browser-check
+--disable-gpu
+--disable-dev-shm-usage
+--no-sandbox
+--force-renderer-accessibility
+--disable-features=TranslateUI,MediaRouter
+--disable-background-networking
+--disable-sync

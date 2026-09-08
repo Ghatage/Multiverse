@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <focus><focusNew>yes</focusNew></focus>
+  <placement><policy>Smart</policy></placement>
+  <theme><name>Fork</name><titleLayout>CIML</titleLayout><keepBorder>yes</keepBorder>
+    <font place="ActiveWindow"><name>DejaVu Sans</name><size>10</size><weight>Bold</weight></font>
+    <font place="InactiveWindow"><name>DejaVu Sans</name><size>10</size></font>
+  </theme>
+  <desktops><number>1</number><firstdesk>1</firstdesk><names><name>Desktop</name></names></desktops>
+  <keyboard>
+    <keybind key="A-F4"><action name="Close"/></keybind>
+    <keybind key="A-Tab"><action name="NextWindow"/></keybind>
+    <keybind key="W-d"><action name="ToggleShowDesktop"/></keybind>
+    <keybind key="W-e"><action name="Execute"><command>pcmanfm</command></action></keybind>
+    <keybind key="W-Return"><action name="Execute"><command>xterm</command></action></keybind>
+  </keyboard>
+  <mouse><context name="Titlebar">
+    <mousebind button="Left" action="Drag"><action name="Move"/></mousebind>
+    <mousebind button="Left" action="DoubleClick"><action name="ToggleMaximize"/></mousebind>
+  </context><context name="Close"><mousebind button="Left" action="Click"><action name="Close"/></mousebind></context>
+  <context name="Iconify"><mousebind button="Left" action="Click"><action name="Iconify"/></mousebind></context>
+  <context name="Maximize"><mousebind button="Left" action="Click"><action name="ToggleMaximize"/></mousebind></context>
+  <context name="Client"><mousebind button="Left" action="Press"><action name="Focus"/><action name="Raise"/></mousebind></context>
+  </mouse>
+</openbox_config>

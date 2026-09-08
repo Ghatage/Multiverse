@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Files
+Icon=folder
+Exec=pcmanfm /home/user
+Terminal=false
