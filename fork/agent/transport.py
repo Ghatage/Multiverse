@@ -64,7 +64,7 @@ def live_client():
         raise ValueError("API calls disabled by FORK_DISABLE_API=1")
     if not os.environ.get("OPENAI_API_KEY"):
         raise ValueError(
-            "OPENAI_API_KEY is missing; use make agent-test-offline for key-free validation"
+            "OPENAI_API_KEY is missing; add it to .env before running the agent"
         )
     from openai import OpenAI
 
@@ -120,7 +120,7 @@ class HttpTransport:
         self.last_response_id = None
 
     def steer(self, *args, **kwargs):
-        raise NotImplementedError("Mid-turn steering is not implemented")
+        raise NotImplementedError("Mid-turn steering requires WebSocket transport")
 
 
 class WsTransport(HttpTransport):
@@ -133,6 +133,12 @@ class WsTransport(HttpTransport):
         self.reader = None
         self.events = queue.Queue()
         self.current_response_id: dict[str, str] = {}
+        self.poll = None
+        self.on_event = None
+        self.on_response = None
+        self.before_successor = None
+        self.pending_steers: list[dict] = []
+        self.fallback: list[str] = []
 
     def __enter__(self):
         super().__enter__()
@@ -162,6 +168,44 @@ class WsTransport(HttpTransport):
         self.reader = threading.Thread(target=read, daemon=True)
         self.reader.start()
 
+    def steer(self, previous_response_id: str, text: str) -> None:
+        if self.connection is None:
+            raise TransportError("WebSocket disconnected", code="connection_lost")
+        item = {"previous_response_id": previous_response_id, "input": text}
+        try:
+            self.connection.send({"type": "response.steer", **item})
+        except Exception as exc:
+            raise TransportError("Steer send failed", code="connection_lost") from exc
+        self.pending_steers.append(item)
+
+    def _steer_event(self, event: dict) -> None:
+        steer = event.get("steer") or {}
+        match = next(
+            (
+                item
+                for item in self.pending_steers
+                if (steer.get("id") and item.get("id") == steer["id"])
+                or (
+                    item.get("previous_response_id")
+                    == steer.get("previous_response_id")
+                    and item.get("input") == steer.get("input")
+                )
+            ),
+            None,
+        )
+        if match is not None:
+            if event["type"] == "response.steer.accepted":
+                match.update(steer)
+            elif event["type"] == "response.steer.failed":
+                self.fallback.append(match["input"])
+                self.pending_steers.remove(match)
+        if self.on_event:
+            self.on_event(event)
+
+    def take_fallback(self) -> list[str]:
+        result, self.fallback = self.fallback, []
+        return result
+
     def create(self, *, timeout_s: float = 60, **body) -> dict:
         deadline = time.monotonic() + timeout_s
         if self.connection is None:
@@ -173,8 +217,10 @@ class WsTransport(HttpTransport):
             raise TransportError(
                 "WebSocket send failed", code="connection_lost"
             ) from exc
-        active = None
+        active, terminal = None, None
         while True:
+            if self.poll:
+                self.poll(active if terminal is None else None)
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 self.reset()
@@ -182,21 +228,29 @@ class WsTransport(HttpTransport):
                     "Model response exceeded wall deadline", code="wall_cap"
                 )
             try:
-                event = self.events.get(timeout=remaining)
-            except queue.Empty as exc:
-                self.reset()
-                raise WallTimeout(
-                    "Model response exceeded wall deadline", code="wall_cap"
-                ) from exc
+                event = self.events.get(timeout=min(0.25, remaining))
+            except queue.Empty:
+                continue
             if isinstance(event, Exception):
                 raise event
             if event.get("stream_id", lane) != lane:
                 continue
-            kind = event.get("type")
+            kind = event.get("type", "")
             response = event.get("response") or {}
-            if kind == "response.created":
+            if kind.startswith("response.steer."):
+                self._steer_event(event)
+                if terminal is not None and not self.pending_steers:
+                    return terminal
+            elif kind == "response.created":
                 active = response["id"]
                 self.current_response_id[lane] = active
+                # Successor creation commits accepted input, including after required tool output.
+                self.pending_steers = [
+                    s
+                    for s in self.pending_steers
+                    if s["previous_response_id"] == active
+                ]
+                terminal = None
             elif kind == "error":
                 err = event.get("error", event)
                 code = err.get("code", "server_error")
@@ -226,7 +280,21 @@ class WsTransport(HttpTransport):
                     raise TransportError(
                         f"Response failed: {code}", code=code, status=status
                     )
-                return response
+                if self.on_response:
+                    self.on_response(response)
+                terminal = response
+                calls = [
+                    i
+                    for i in response.get("output", [])
+                    if i.get("type") == "function_call"
+                ]
+                steered = (response.get("incomplete_details") or {}).get(
+                    "reason"
+                ) == "steered"
+                if calls or (not self.pending_steers and not steered):
+                    return response
+                if self.before_successor:
+                    self.before_successor()
 
     def reset(self):
         if self.manager is not None:
@@ -235,6 +303,8 @@ class WsTransport(HttpTransport):
             self.reader.join(timeout=1)
         self.manager = self.connection = self.reader = None
         self.current_response_id.clear()
+        self.pending_steers.clear()
+        self.fallback.clear()
         self.events = queue.Queue()
 
     def __exit__(self, *args):

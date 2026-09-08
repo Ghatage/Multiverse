@@ -5,13 +5,16 @@ import os
 import random
 import time
 from collections.abc import Callable
+from contextlib import nullcontext
 from pathlib import Path
 
 import httpx
 
+from fork.agent.judge import JUDGE_TOOL, JudgePool
 from fork.agent.log import RunLogger
 from fork.agent.policy import Caps, ObservationPolicy
 from fork.agent.prompts import SYSTEM
+from fork.agent.steer import SteerChannel
 from fork.agent.tools import TOOLS, ToolExecutor
 from fork.agent.transport import TransportError, WallTimeout, WsTransport
 from fork.cu import db
@@ -92,12 +95,16 @@ def run_task(
     seed: int | None = None,
     approval_waiter=None,
     sleep: Callable = time.sleep,
+    cancel=None,
+    extra_instructions: str = "",
+    judge: bool = False,
+    judge_runner=None,
 ) -> dict:
     validate_name(branch)
     if effort not in {"low", "medium", "high", "xhigh", "max"}:
         raise ValueError("Invalid reasoning effort")
     if os.environ.get("FORK_MODEL", "gpt-6-astra") != "gpt-6-astra":
-        raise ValueError("Phase 06 accounting supports gpt-6-astra only")
+        raise ValueError("Cost accounting supports gpt-6-astra only")
     caps, policy = caps or Caps(), policy or ObservationPolicy()
     tx = transport or WsTransport()
     log = RunLogger(
@@ -109,11 +116,53 @@ def run_task(
     text, error = "", None
     reason = "error"
     executor = None
+    channel = SteerChannel(branch)
+    steering_history: list[str] = []
+    queued_steers: list[str] = []
+    accounted: set[str] = set()
+    judges = JudgePool(log, judge_runner) if judge else None
+
+    def collect_steers(active=None):
+        for item in channel.read():
+            steering_history.append(item["text"])
+            if isinstance(tx, WsTransport) and active:
+                tx.steer(active, item["text"])
+                ack = "sent"
+            else:
+                queued_steers.append(item["text"])
+                ack = "queued"
+            log.write(
+                kind="steer",
+                step=None,
+                text=item["text"],
+                ack=ack,
+                previous_response_id=active,
+            )
+        if isinstance(tx, WsTransport):
+            queued_steers.extend(tx.take_fallback())
+
+    def steer_input() -> list[dict]:
+        collect_steers()
+        result = [{"role": "user", "content": text} for text in queued_steers]
+        queued_steers.clear()
+        return result
+
+    if isinstance(tx, WsTransport):
+        tx.poll = lambda active: collect_steers(active) if active else None
+        tx.on_event = lambda event: log.write(
+            kind="steer",
+            step=None,
+            ack=event["type"],
+            steer_id=(event.get("steer") or {}).get("id"),
+            code=(event.get("error") or {}).get("code"),
+        )
 
     def budget():
+        if cancel is not None and cancel.is_set():
+            raise StopRun("raced_out")
         if time.monotonic() >= deadline:
             raise StopRun("wall_cap")
-        if log.cost_usd >= caps.max_cost_usd:
+        if log.cost_usd + (judges.reserved_usd if judges else 0) >= caps.max_cost_usd:
             raise StopRun("cost_cap")
         if log.turns >= caps.max_turns:
             raise StopRun("turn_cap")
@@ -122,23 +171,46 @@ def run_task(
             if current.container_id != container_id or current.status != "healthy":
                 raise StopRun("rewound")
 
+    if isinstance(tx, WsTransport):
+        tx.before_successor = budget
+
+    def steering_context() -> str:
+        return (
+            "\nOperator updates received (may already be applied; inspect the current UI "
+            "and completed actions before doing anything again): "
+            + json.dumps(steering_history)
+        )
+
     def request(body: dict, purpose="task") -> dict:
         for attempt in range(7):
             budget()
             start = time.monotonic()
             log.model_calls += 1
-            try:
-                response = tx.create(
-                    timeout_s=max(0.001, deadline - time.monotonic()), **body
-                )
+
+            def account(response, started=start):
+                if response["id"] in accounted:
+                    return
+                accounted.add(response["id"])
                 log.model(
                     response,
-                    round((time.monotonic() - start) * 1000),
+                    round((time.monotonic() - started) * 1000),
                     body["reasoning"]["effort"],
                     purpose=purpose,
                 )
                 if progress:
                     progress(log.cost_usd)
+
+            if isinstance(tx, WsTransport):
+                tx.on_response = account
+            before = len(accounted)
+            delivery_turn = log.turns + 1
+            try:
+                response = tx.create(
+                    timeout_s=max(0.001, deadline - time.monotonic()), **body
+                )
+                account(response)
+                if judges:
+                    judges.delivered(body["input"], delivery_turn)
                 return response
             except WallTimeout:
                 raise StopRun("wall_cap") from None
@@ -167,6 +239,8 @@ def run_task(
                     delay_s=delay,
                 )
                 sleep(max(0, delay))
+            finally:
+                log.model_calls += max(0, len(accounted) - before - 1)
         raise AssertionError("Retry loop exhausted")
 
     def body(previous, inp, *, summarize=False) -> dict:
@@ -174,8 +248,9 @@ def run_task(
             "model": "gpt-6-astra",
             "stream_id": branch,
             "store": False,
-            "instructions": SYSTEM,
-            "tools": [] if summarize else TOOLS,
+            "instructions": SYSTEM
+            + ("\n" + extra_instructions if extra_instructions else ""),
+            "tools": [] if summarize else [*TOOLS, *([JUDGE_TOOL] if judge else [])],
             "tool_choice": "none" if summarize else "auto",
             "parallel_tool_calls": False,
             "reasoning": {"effort": "low" if summarize else effort, "summary": "auto"},
@@ -188,7 +263,7 @@ def run_task(
 
     try:
         # Entering an injected transport never requires a real key. Live clients fail here before UI mutation.
-        with tx:
+        with channel, tx, judges if judges is not None else nullcontext():
             if repl is None:
                 if repl_url is None:
                     state = db.get_branch(branch)
@@ -229,7 +304,10 @@ def run_task(
             previous = None
             reset_count = 0
             while True:
+                if judges:
+                    inp.extend(judges.drain())
                 budget()
+                inp.extend(steer_input())
                 try:
                     response = request(body(previous, inp))
                 except TransportError as exc:
@@ -240,6 +318,8 @@ def run_task(
                     ):
                         raise
                     tx.reset()
+                    if judges:
+                        judges.reset()
                     previous = None
                     reset_count += 1
                     log.write(
@@ -254,7 +334,8 @@ def run_task(
                                     "type": "input_text",
                                     "text": task["prompt"]
                                     + "\nConnection reset. Re-observe before acting. Recent completed tools: "
-                                    + json.dumps(executor.history[-6:]),
+                                    + json.dumps(executor.history[-6:])
+                                    + steering_context(),
                                 }
                             ],
                         }
@@ -269,6 +350,8 @@ def run_task(
                     inp[0]["content"].extend(observed["output"])
                     continue
                 previous = response["id"]
+                if cancel is not None and cancel.is_set():
+                    raise StopRun("raced_out")
                 output = response.get("output", [])
                 if any(
                     part.get("type") == "refusal"
@@ -284,6 +367,19 @@ def run_task(
                 if not calls and any(
                     item.get("phase") in {None, "final_answer"} for item in messages
                 ):
+                    additions = steer_input()
+                    if judges:
+                        while judges.jobs:
+                            if time.monotonic() >= deadline:
+                                raise StopRun("wall_cap")
+                            if cancel is not None and cancel.is_set():
+                                raise StopRun("raced_out")
+                            judges.wait(timeout=min(0.25, deadline - time.monotonic()))
+                            additions.extend(judges.drain())
+                            additions.extend(steer_input())
+                    if additions:
+                        inp = additions
+                        continue
                     text = final_text(response)
                     if time.monotonic() >= deadline:
                         raise StopRun("wall_cap")
@@ -302,8 +398,8 @@ def run_task(
                     raise StopRun("cost_cap")
                 inp = []
                 for call in calls:
-                    if call.get("async"):
-                        raise TransportError("Asynchronous tools are not supported")
+                    if cancel is not None and cancel.is_set():
+                        raise StopRun("raced_out")
                     if container_id is not None:
                         current = db.get_branch(branch, include_removed=True)
                         if (
@@ -313,6 +409,41 @@ def run_task(
                             raise StopRun("rewound")
                     if time.monotonic() >= deadline:
                         raise StopRun("wall_cap")
+                    if call.get("name") == "judge" and judges:
+                        observed = executor.execute(
+                            {
+                                "name": "observe",
+                                "call_id": "judge-snapshot-" + call["call_id"],
+                                "arguments": '{"mode":"both"}',
+                            }
+                        )
+                        if not judges.submit(
+                            call,
+                            task,
+                            observed["output"],
+                            max(0.001, deadline - time.monotonic()),
+                            available_usd=caps.max_cost_usd - log.cost_usd,
+                        ):
+                            inp.append(
+                                {
+                                    "type": "function_call_output",
+                                    "call_id": call["call_id"],
+                                    "output": json.dumps(
+                                        {
+                                            "score": 0,
+                                            "verdict": "fail",
+                                            "missing": [
+                                                "Judge capacity or budget exhausted"
+                                            ],
+                                        }
+                                    ),
+                                }
+                            )
+                        continue
+                    if call.get("async"):
+                        raise TransportError(
+                            "Only the judge tool supports asynchronous execution"
+                        )
                     inp.append(executor.execute(call))
                 if not calls:
                     if not messages:
@@ -366,13 +497,16 @@ def run_task(
                                     "type": "input_text",
                                     "text": task["prompt"]
                                     + "\nProgress summary:\n"
-                                    + final_text(summarized),
+                                    + final_text(summarized)
+                                    + steering_context(),
                                 },
                                 *observed["output"],
                             ],
                         }
                     ]
                     previous = None
+                    if judges:
+                        judges.reset()
                     log.write(
                         kind="tool",
                         step=None,

@@ -40,6 +40,7 @@ def run(
     transport: str = "ws",
     repl_url: str | None = None,
     seed: int | None = None,
+    judge: bool = False,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ):
     load_dotenv()
@@ -67,6 +68,7 @@ def run(
             transport=tx,
             repl_url=repl_url,
             seed=seed,
+            judge=judge,
             progress=None
             if json_output
             else lambda cost: typer.echo(f"cost so far: ${cost:.4f}", err=True),
@@ -85,6 +87,78 @@ def run(
     except (ValueError, OSError, httpx.HTTPError) as exc:
         typer.echo(
             json.dumps({"error": str(exc)}) if json_output else f"Error: {exc}",
+            err=not json_output,
+        )
+        raise typer.Exit(1) from exc
+
+
+@app.command("steer")
+def steer(
+    branch: str,
+    text: str,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+):
+    """Add an instruction to the active agent on a desktop."""
+    from fork.agent.steer import SteerChannel
+
+    load_dotenv()
+    try:
+        item = SteerChannel.send(branch, text)
+        typer.echo(
+            json.dumps({"branch": branch, "status": "queued", **item})
+            if json_output
+            else f"Instruction queued for {branch}."
+        )
+    except (ValueError, OSError) as exc:
+        typer.echo(
+            json.dumps({"error": str(exc)}) if json_output else str(exc),
+            err=not json_output,
+        )
+        raise typer.Exit(1) from exc
+
+
+@app.command("race")
+def race_command(
+    checkpoint: Annotated[str, typer.Option("--from")],
+    task: Annotated[Path, typer.Option(exists=True, dir_okay=False)],
+    variants: str = "low,medium",
+    stagger: float = 5,
+    max_wall: float = 300,
+    max_cost_usd: float = 2,
+    max_turns: int = 30,
+    judge: bool = False,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+):
+    """Fork a checkpoint and report the first independently verified winner."""
+    from fork.agent.race import race
+    from fork.agent.transport import live_client
+
+    load_dotenv()
+    try:
+        efforts = [value.strip() for value in variants.split(",")]
+        client = live_client()
+        client.close()
+        result = race(
+            checkpoint,
+            [{"name": e, "effort": e} for e in efforts],
+            task,
+            stagger_s=stagger,
+            max_wall_s=max_wall,
+            max_cost_usd=max_cost_usd,
+            max_turns=max_turns,
+            judge=judge,
+        )
+        typer.echo(
+            json.dumps(result)
+            if json_output
+            else f"Winner: {result['winner'] or 'none verified'}; "
+            f"{result['elapsed_s']:.1f}s; estimated ${result['cost_usd']:.4f}"
+        )
+        if not result["winner"]:
+            raise typer.Exit(1)
+    except (ValueError, RuntimeError, OSError) as exc:
+        typer.echo(
+            json.dumps({"error": str(exc)}) if json_output else str(exc),
             err=not json_output,
         )
         raise typer.Exit(1) from exc
