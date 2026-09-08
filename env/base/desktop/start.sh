@@ -14,8 +14,7 @@ gtk-theme-name="Adwaita"
 gtk-icon-theme-name="Adwaita"
 gtk-font-name="DejaVu Sans 10"
 INI
-rsvg-convert /opt/fork/desktop/wallpaper.svg -o /tmp/fork-wallpaper.png
-feh --no-fehbg --bg-fill /tmp/fork-wallpaper.png
+feh --no-fehbg --bg-fill /opt/fork/desktop/wallpaper.jpg
 xcompmgr -c -r 8 -o 0.25 -l -6 -t -6 >/tmp/compositor.log 2>&1 &
 sleep 0.2
 # These daemons belong to the existing desktop session.

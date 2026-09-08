@@ -49,12 +49,23 @@ async function end(p) {
 }
 function state() { return {held: Boolean(lease), orphaned: Boolean(lease?.orphaned)}; }
 function validate(action) {
-  const fields = {navigate:['url'], fill:['selector','value'], click:['selector'], select:['selector','value'],
+  const fields = {navigate:['url'], new_tab:['url'], pointer_click:['x','y'], pointer_drag:['points'], press_key:['key'], fill:['selector','value'], click:['selector'], select:['selector','value'],
     check:['selector','checked'], write_file:['path','content']};
   const expected = fields[action?.operation];
   if (!expected || Object.keys(action).sort().join() !== ['operation',...expected].sort().join()) throw new Error('Unsupported action arguments');
-  for (const key of expected) if (typeof action[key] !== (key === 'checked' ? 'boolean' : 'string')) throw new Error('Invalid action argument type');
-  if (action.operation === 'navigate' && !/^https?:$/.test(new URL(action.url).protocol)) throw new Error('Unsupported URL scheme');
+  for (const key of expected) {
+    if (key === 'points') {
+      if (!Array.isArray(action.points) || action.points.length < 2 || action.points.length > 256) throw new Error('A drag requires 2-256 points');
+      for (const point of action.points) {
+        if (!point || Object.keys(point).sort().join() !== 'x,y') throw new Error('Invalid drag point');
+        validate({operation:'pointer_click', ...point});
+      }
+    } else if (key === 'x' || key === 'y') {
+      if (!Number.isFinite(action[key]) || action[key] < 0 || action[key] >= 16384) throw new Error('Invalid pointer coordinate');
+    } else if (typeof action[key] !== (key === 'checked' ? 'boolean' : 'string')) throw new Error('Invalid action argument type');
+  }
+  if (['navigate','new_tab'].includes(action.operation) && !/^https?:$/.test(new URL(action.url).protocol)) throw new Error('Unsupported URL scheme');
+  if (action.operation === 'press_key' && (!action.key.trim() || action.key.length > 80)) throw new Error('Invalid key chord');
   if (action.selector !== undefined && !action.selector.trim()) throw new Error('Empty selector');
   if (Buffer.byteLength(JSON.stringify(action)) > 65536) throw new Error('Action too large');
 }
@@ -75,9 +86,14 @@ async function execute(js, p) {
     return {completed:true};
   }
   await js.ensure();
+  if (action.operation === 'new_tab') {
+    js.ctx.page = await js.ctx.context.newPage();
+    await js.page().bringToFront();
+  }
   const page = js.page();
   const options = {timeout: Math.min(30000, Math.max(1, p.timeout_ms || 30000))};
-  if (action.operation === 'navigate') await page.goto(action.url, {...options, waitUntil:'domcontentloaded'});
+  if (['navigate','new_tab'].includes(action.operation)) await page.goto(action.url, {...options, waitUntil:'domcontentloaded'});
+  else if (['pointer_click','pointer_drag','press_key'].includes(action.operation)) await require('./pointer').execute(page, action);
   else {
     const locator = page.locator(action.selector);
     if (action.operation === 'fill') await locator.fill(action.value, options);

@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 from collections.abc import Callable
+from pathlib import Path
 from typing import Annotated, Any
 
 import httpx
@@ -13,15 +14,17 @@ from rich.console import Console
 from rich.table import Table
 
 from fork.cu import branch as manager
-from fork.cu import db
+from fork.cu import db, session
 from fork.repl_client import ReplError
 
 load_dotenv()
 app = typer.Typer(no_args_is_help=True)
 branch_app = typer.Typer(no_args_is_help=True)
 base_app = typer.Typer(no_args_is_help=True)
+desktop_app = typer.Typer(no_args_is_help=True)
 app.add_typer(branch_app, name="branch")
 app.add_typer(base_app, name="base")
+app.add_typer(desktop_app, name="desktop")
 Json = Annotated[bool, typer.Option("--json", help="Emit machine-readable JSON only.")]
 
 
@@ -95,9 +98,26 @@ def create(
     source: Annotated[str | None, typer.Option("--from")] = None,
     effort: str = "low",
     proxy: bool = False,
+    desktop_session: Annotated[Path | None, typer.Option("--desktop-session")] = None,
     json_output: Json = False,
 ):
-    invoke(json_output, manager.create, name, source, effort, proxy)
+    invoke(
+        json_output,
+        lambda: manager.create(
+            name, source, effort, proxy, session.load(desktop_session)
+        ),
+    )
+
+
+@desktop_app.command("pack")
+def pack(
+    output_path: Annotated[Path, typer.Option("--out")],
+    browser_state: Annotated[Path | None, typer.Option("--browser-state")] = None,
+    document: Annotated[list[Path] | None, typer.Option("--document")] = None,
+    json_output: Json = False,
+):
+    """Package captured browser windows and saved documents for independent copies."""
+    invoke(json_output, session.pack, browser_state, document or [], output_path)
 
 
 @app.command("checkpoint")
@@ -111,12 +131,17 @@ def fork(
     n: Annotated[int | None, typer.Option("--n", min=1, max=99)] = None,
     source: Annotated[str | None, typer.Option("--from")] = None,
     names: str | None = None,
+    desktop_session: Annotated[Path | None, typer.Option("--desktop-session")] = None,
     json_output: Json = False,
 ):
     def run():
         width = n if n is not None else int(os.environ.get("FORK_MAX_BRANCHES", "2"))
         return manager.fork(
-            name, width, source, names.split(",") if names is not None else None
+            name,
+            width,
+            source,
+            names.split(",") if names is not None else None,
+            session.load(desktop_session),
         )
 
     invoke(json_output, run)

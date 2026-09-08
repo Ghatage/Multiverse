@@ -5,7 +5,9 @@
 --user-data-dir=/home/user/chrome
 --no-first-run
 --no-default-browser-check
---disable-gpu
+--use-gl=angle
+--use-angle=swiftshader
+--enable-unsafe-swiftshader
 --disable-dev-shm-usage
 --no-sandbox
 --force-renderer-accessibility

@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 
 from fork import locks
-from fork.cu import db, docker
+from fork.cu import db, docker, session
 from fork.repl_client import ReplClient
 
 EFFORTS = {"low", "medium", "high", "xhigh", "max"}
@@ -35,24 +35,41 @@ def _resolve(source: str | None) -> tuple[str, str | None]:
     ), None
 
 
-def _start(b: db.Branch, timeout: float = 60) -> dict:
+def _start(
+    b: db.Branch, timeout: float = 120, desktop_session: dict | None = None
+) -> dict:
     start = time.monotonic()
     try:
-        cid = docker.run(b.name, b.idx, b.image, b.proxy)
+        cid = (
+            docker.run(b.name, b.idx, b.image, b.proxy)
+            if desktop_session is None
+            else docker.run(b.name, b.idx, b.image, b.proxy, desktop_session)
+        )
         db.update(b.name, container_id=cid, status="starting")
         docker.wait_healthy(b.name, timeout)
+        report = docker.desktop_report(b.name)
         db.update(b.name, status="healthy")
     except (docker.DockerError, OSError) as exc:
         db.update(b.name, status="error")
         raise docker.DockerError(
             f"{b.name}: {exc}; lease retained, inspect or cu rm {b.name}"
         ) from exc
-    return _result(db.get_branch(b.name), boot_s=round(time.monotonic() - start, 3))
+    extra = {}
+    if report is not None:
+        extra["desktop_session"] = report
+    return _result(
+        db.get_branch(b.name), boot_s=round(time.monotonic() - start, 3), **extra
+    )
 
 
 def create(
-    name: str, source: str | None = None, effort: str = "low", proxy: bool = False
+    name: str,
+    source: str | None = None,
+    effort: str = "low",
+    proxy: bool = False,
+    desktop_session: dict | None = None,
 ) -> dict:
+    desktop_session = session.validate(desktop_session)
     locks.validate_name(name)
     if effort not in EFFORTS:
         raise ValueError(f"Invalid effort: {effort}")
@@ -60,12 +77,16 @@ def create(
         image, parent = _resolve(source)
         if not docker.image_exists(image):
             raise ValueError(f"Image does not exist: {image}; run cu base build")
+        if desktop_session is not None and not docker.supports_session(image):
+            raise ValueError(
+                "Image lacks desktop import support; rebuild the runtime image"
+            )
         if docker.container(f"fork-{name}") is not None:
             raise ValueError(
                 f"Container fork-{name} already exists; no container was modified"
             )
         b = db.reserve(name, image, parent, effort, proxy)
-        return _start(b)
+        return _start(b, desktop_session=desktop_session)
 
 
 def _checkpoint(name: str, label: str | None) -> dict:
@@ -115,8 +136,13 @@ class ForkError(RuntimeError):
 
 
 def fork(
-    name: str, n: int = 2, source: str | None = None, names: list[str] | None = None
+    name: str,
+    n: int = 2,
+    source: str | None = None,
+    names: list[str] | None = None,
+    desktop_session: dict | None = None,
 ) -> dict:
+    desktop_session = session.validate(desktop_session)
     if not 1 <= n <= 99:
         raise ValueError("Fork count must be between 1 and 99")
     names = names if names is not None else [f"{name}-{i}" for i in range(1, n + 1)]
@@ -136,7 +162,9 @@ def fork(
     results, errors = {}, {}
     with ThreadPoolExecutor(max_workers=n) as pool:
         tasks = {
-            pool.submit(create, child, ck["id"], b.effort, b.proxy): child
+            pool.submit(
+                create, child, ck["id"], b.effort, b.proxy, desktop_session
+            ): child
             for child in names
         }
         for task in as_completed(tasks):

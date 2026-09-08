@@ -2,7 +2,9 @@
 
 import json
 import subprocess
+import tempfile
 import time
+from pathlib import Path
 
 from env.scripts.ports import docker_publish_args, port_block
 
@@ -55,7 +57,26 @@ def image_platform(image: str) -> str:
     return platform
 
 
-def run(name: str, idx: int, image: str, proxy: bool = False) -> str:
+def supports_session(image: str) -> bool:
+    return (
+        command(
+            "image",
+            "inspect",
+            "--format",
+            '{{index .Config.Labels "fork.desktop-session"}}',
+            image,
+        )
+        == "1"
+    )
+
+
+def run(
+    name: str,
+    idx: int,
+    image: str,
+    proxy: bool = False,
+    desktop_session: dict | None = None,
+) -> str:
     args = [
         "run",
         "-d",
@@ -75,7 +96,18 @@ def run(name: str, idx: int, image: str, proxy: bool = False) -> str:
             "-e",
             f"FORK_PROXY=http://host.docker.internal:{port_block(idx)['proxy']}",
         ]
-    return command(*args, image)
+    if desktop_session is None:
+        return command(*args, image)
+    # Copy into a stopped container, never bind-mount host documents. Each child
+    # receives identical captured bytes even if the Mac file subsequently changes.
+    cid = command("create", *args[2:], image)
+    with tempfile.TemporaryDirectory(prefix="fork-session-") as directory:
+        seed = Path(directory) / "desktop-seed.json"
+        seed.write_text(json.dumps(desktop_session))
+        seed.chmod(0o644)  # Parent directory is private; guest user must read seed.
+        command("cp", str(seed), f"{cid}:/state/desktop-seed.json")
+    command("start", cid)
+    return cid
 
 
 def owned(name: str, expected_id: str | None = None) -> dict | None:
@@ -139,6 +171,16 @@ def commit(name: str, ck_id: str) -> tuple[str, int, int]:
 
 def read_state(name: str, file: str) -> dict:
     return json.loads(command("exec", f"fork-{name}", "cat", f"/state/{file}.json"))
+
+
+def desktop_report(name: str) -> dict | None:
+    """Read startup fidelity for fresh imports and inherited checkpoint images."""
+    script = (
+        "const fs=require('fs');try {"
+        "process.stdout.write(fs.readFileSync('/state/desktop-report.json','utf8'));"
+        "} catch(e) {if(e.code!=='ENOENT')throw e;process.stdout.write('null');}"
+    )
+    return json.loads(command("exec", f"fork-{name}", "node", "-e", script))
 
 
 def diff(name: str) -> list[tuple[str, str]]:

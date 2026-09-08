@@ -5,7 +5,17 @@
   const palette = ['#b6a0e2', '#80bbb5', '#dea381', '#8eaddb', '#cb92b8', '#bdc787', '#c39cdf', '#7fb8d0'];
   const statusColors = {succeeded:'#87c9ad', failed:'#ef8f91', pending:'#d9b77c', unverified:'#8dadd5'};
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const state = {payload:null, branch:'', runFilter:'', selectedRun:null, selected:null, timeline:[], position:0, playing:false, grid:false, tab:'inspect', revision:null};
+  const query = new URLSearchParams(location.search);
+  const desktopView = query.get('view') === 'desktops';
+  const desktopNames = new Set((query.get('branches') || '').split(',').filter(name=>/^[a-z0-9-]{1,32}$/.test(name)));
+  const state = {payload:null, branch:'', runFilter:'', selectedRun:null, selected:null, timeline:[], position:0, playing:false, grid:desktopView, tab:'inspect', revision:null};
+  if(desktopView) {
+    document.body.classList.add('desktop-view');
+    document.title='Multiverse · Live desktops';
+    $('desktops').hidden=false;
+    $('toggle-grid').setAttribute('aria-expanded','true');
+    document.querySelector('.brand-caption').textContent='Live desktops';
+  }
   const nodeCache = new Map(), linkCache = new Map(), desktopCache = new Map(), labelCache = new Map();
   let graph, initialFit = false, graphSignature = '', pollBusy = false, refreshQueued = false, inspectorRequest = 0;
   let pauseTimer, playbackTimer, toastTimer, source, pollTimer, resumeQueued=false;
@@ -298,6 +308,7 @@
   function desktopCard(branch) {
     const card=el('article','desktop-card');card.dataset.branch=branch.name;
     const header=el('header');const title=el('strong','',branch.name), status=pill(branch.status);append(header,title,status);
+    const open=el('a','desktop-open','Open ↗');open.target='_blank';open.rel='noopener noreferrer';open.setAttribute('aria-label',`Open ${branch.name} desktop`);header.append(open);
     const frame=el('div','desktop-frame');const footer=el('footer'), form=el('form','steer-form'), input=el('input');input.placeholder='Steer the active agent…';input.setAttribute('aria-label',`Steer ${branch.name}`);input.maxLength=16384;
     const send=button('Send','button',()=>{});send.type='submit';append(form,input,send);const message=el('span','steer-status');append(footer,form,message);append(card,header,frame,footer);
     form.addEventListener('submit',async event=>{
@@ -305,19 +316,23 @@
       try {const response=await fetch(`/api/steer/${encodeURIComponent(branch.name)}`,{method:'POST',headers:{'Content-Type':'application/json','X-Fork-Dashboard':'1'},body:JSON.stringify({text:input.value})});const data=await response.json();if(!response.ok)throw new Error(typeof data.detail==='string'?data.detail:'Steering request failed');input.value='';message.textContent='Queued for the active agent';toast('Steering queued');}
       catch(error){message.textContent=error.message;toast(error.message);}finally{send.disabled=!branch.agent_active;}
     });
-    return {card,status,frame,input,send,message,iframe:null,url:null,branch};
+    return {card,status,open,frame,input,send,message,iframe:null,url:null,branch};
   }
   function renderDesktops() {
-    const branches=state.payload.branches.filter(b=>b.status!=='removed');$('desktop-count').textContent=branches.length;
+    const branches=state.payload.branches.filter(b=>b.status!=='removed'&&(!desktopView||!desktopNames.size||desktopNames.has(b.name)));$('desktop-count').textContent=branches.length;
+    if(desktopView)branches.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+    $('grid').style.setProperty('--desktop-rows',String(Math.max(1,Math.ceil(branches.length/3))));
     const ids=new Set(branches.map(b=>b.name));
     for(const [name,item] of desktopCache)if(!ids.has(name)){item.card.remove();desktopCache.delete(name);}
     for(const branch of branches) {
       let item=desktopCache.get(branch.name);if(!item){item=desktopCard(branch);desktopCache.set(branch.name,item);$('grid').append(item.card);}
       Object.assign(item.branch,branch);item.status.textContent=branch.status;
+      item.open.hidden=!branch.desktop_url;
+      if(branch.desktop_url) {const url=new URL(branch.desktop_url);url.searchParams.delete('view_only');item.open.href=url.href;}
       item.input.disabled=item.send.disabled=!branch.agent_active;
       if(document.activeElement!==item.input)item.message.textContent=branch.agent_active?'Existing steering channel · Agent active':'No active agent · Steering unavailable';
       if(state.grid && branch.desktop_url && ['healthy','running'].includes(branch.status)) {
-        if(!item.iframe){item.iframe=el('iframe');item.iframe.title=`${branch.name} live desktop, view only`;item.iframe.loading='lazy';clear(item.frame).append(item.iframe);}
+        if(!item.iframe){item.iframe=el('iframe');item.iframe.title=`${branch.name} live desktop, view only`;item.iframe.loading=desktopView?'eager':'lazy';clear(item.frame).append(item.iframe);}
         if(item.url!==branch.desktop_url){item.url=branch.desktop_url;item.iframe.src=branch.desktop_url;}
       } else if(!item.iframe) item.frame.textContent=state.grid?`Desktop ${branch.status}`:'Preview loads when expanded';
     }
@@ -353,7 +368,7 @@
   $('clear-selection').addEventListener('click',()=>{pause();state.selectedRun=null;state.runFilter='';resetInspector();refilter();});
   $('inspect-tab').addEventListener('click',showInspect);
   $('events-tab').addEventListener('click',()=>{state.tab='events';$('inspect-content').hidden=true;$('events-content').hidden=false;$('inspect-tab').setAttribute('aria-selected','false');$('events-tab').setAttribute('aria-selected','true');renderEvents();});
-  $('toggle-grid').addEventListener('click',()=>{state.grid=!state.grid;$('desktops').hidden=!state.grid;$('toggle-grid').setAttribute('aria-expanded',String(state.grid));renderDesktops();if(state.grid)$('desktops').scrollIntoView({behavior:reduced?'instant':'smooth',block:'start'});});
+  $('toggle-grid').addEventListener('click',()=>{if(desktopView){location.href='/';return;}state.grid=!state.grid;$('desktops').hidden=!state.grid;$('toggle-grid').setAttribute('aria-expanded',String(state.grid));renderDesktops();if(state.grid)$('desktops').scrollIntoView({behavior:reduced?'instant':'smooth',block:'start'});});
   $('play').addEventListener('click',()=>state.playing?pause():startPlayback());
   $('scrubber').addEventListener('input',e=>{pause();state.position=Number(e.target.value);if(state.timeline[state.position])selectStep(state.timeline[state.position].id);});
   $('previous').addEventListener('click',()=>{pause();state.position=Math.max(0,state.position-1);if(state.timeline[state.position])selectStep(state.timeline[state.position].id);});
@@ -364,5 +379,5 @@
   window.addEventListener('pagehide',()=>{source?.close();clearInterval(pollTimer);clearTimeout(playbackTimer);graph?.pauseAnimation();});
   // Read-only diagnostics for local integration validation; no execution controls.
   window.forkDashboard={get snapshot(){return state.payload;},get selection(){return state.selected;},get camera(){return graph?.cameraPosition();},get positions(){return graph?.graphData().nodes.map(n=>({id:n.id,x:n.x,y:n.y,z:n.z}));},get graphCounts(){return graph?{nodes:graph.graphData().nodes.length,links:graph.graphData().links.length}:null;}};
-  initializeGraph();resetInspector();refresh().then(reconnect);pollTimer=setInterval(refresh,5000);
+  if(!desktopView)initializeGraph();resetInspector();refresh().then(reconnect);pollTimer=setInterval(refresh,5000);
 })();

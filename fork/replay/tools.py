@@ -9,6 +9,24 @@ from fork.mutations.actions import OPERATIONS
 from fork.mutations.coordinator import BoundaryError
 from fork.repl_client import ReplError
 
+COORDINATE = {"type": "number", "minimum": 0, "exclusiveMaximum": 16384}
+FIELD_SCHEMAS = {
+    "checked": {"type": "boolean"},
+    "x": COORDINATE,
+    "y": COORDINATE,
+    "points": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 256,
+        "items": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["x", "y"],
+            "properties": {"x": COORDINATE, "y": COORDINATE},
+        },
+    },
+}
+
 ACTION_SCHEMA = {
     "anyOf": [
         {
@@ -18,7 +36,7 @@ ACTION_SCHEMA = {
             "properties": {
                 "operation": {"type": "string", "enum": [operation]},
                 **{
-                    field: {"type": "boolean" if field == "checked" else "string"}
+                    field: FIELD_SCHEMAS.get(field, {"type": "string"})
                     for field in fields
                 },
             },
@@ -29,7 +47,7 @@ ACTION_SCHEMA = {
 TOOLS_CHECKPOINTED = [
     tool(
         "act",
-        "Execute an ordered list of individual actions. Supported operations: navigate(url), fill(selector,value), click(selector), select(selector,value), check(selector,checked), write_file(path,content). Selectors use Playwright CSS, text=, or role= syntax. Each action is checkpointed before the next starts. No arbitrary JavaScript/Python is available.",
+        "Execute an ordered list of individual actions. Supported operations: navigate(url), new_tab(url), fill(selector,value), click(selector), select(selector,value), check(selector,checked), write_file(path,content), pointer_click(x,y), pointer_drag(points:[{x,y},...]), press_key(key). Pointer coordinates are CSS pixels relative to the browser viewport screenshot, NOT the full desktop. A drag holds the left mouse button along 2-256 points and releases it; use two points for a straight drag or shape bounding box. press_key accepts Playwright chords such as Control+z. new_tab preserves existing tabs and brings the new page forward. Selectors use Playwright CSS, text=, or role= syntax. Each action is checkpointed before the next starts. No arbitrary JavaScript/Python is available.",
         {
             "actions": {
                 "type": "array",

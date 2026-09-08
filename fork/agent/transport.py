@@ -257,7 +257,12 @@ class WsTransport(HttpTransport):
                 status = (
                     429
                     if code in {"rate_limit_exceeded", "slow_down"}
-                    else (503 if code in {"server_error", "overloaded"} else None)
+                    else (
+                        503
+                        if code
+                        in {"server_error", "overloaded", "server_is_overloaded"}
+                        else None
+                    )
                 )
                 raise TransportError(
                     f"WebSocket error: {code}", code=code, status=status
@@ -275,7 +280,12 @@ class WsTransport(HttpTransport):
                     status = (
                         429
                         if code == "rate_limit_exceeded"
-                        else (503 if code == "server_error" else None)
+                        else (
+                            503
+                            if code
+                            in {"server_error", "overloaded", "server_is_overloaded"}
+                            else None
+                        )
                     )
                     raise TransportError(
                         f"Response failed: {code}", code=code, status=status

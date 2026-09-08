@@ -14,6 +14,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from fork.agent.steer import SteerChannel
 from fork.dashboard.artifacts import read_reference
 from fork.dashboard.data import Reader, Settings, digest
+from fork.dashboard.startup import router as startup_router
 from fork.locks import data_dir
 
 
@@ -55,6 +56,9 @@ def create_app(settings=None):
     reader = Reader(settings)
     app = FastAPI(title="Fork execution explorer", docs_url=None, redoc_url=None)
     app.state.reader = reader
+    # Lifecycle writes must target the same workspace the dashboard displays.
+    if settings.data.resolve() == data_dir().resolve() and not settings.synthetic:
+        app.include_router(startup_router())
     app.add_middleware(
         TrustedHostMiddleware,
         allowed_hosts=["localhost", "127.0.0.1", "[::1]", "testserver"],
