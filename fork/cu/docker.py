@@ -46,6 +46,15 @@ def image_exists(image: str) -> bool:
         raise
 
 
+def image_platform(image: str) -> str:
+    platform = command(
+        "image", "inspect", "--format", "{{.Os}}/{{.Architecture}}", image
+    )
+    if platform not in {"linux/amd64", "linux/arm64"}:
+        raise DockerError(f"Unsupported desktop image platform: {platform}")
+    return platform
+
+
 def run(name: str, idx: int, image: str, proxy: bool = False) -> str:
     args = [
         "run",
@@ -53,7 +62,7 @@ def run(name: str, idx: int, image: str, proxy: bool = False) -> str:
         "--name",
         f"fork-{name}",
         "--platform",
-        "linux/arm64",
+        image_platform(image),
         "--shm-size=1g",
         "--label",
         f"fork.branch={name}",

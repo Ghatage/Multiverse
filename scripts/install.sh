@@ -3,18 +3,23 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="/opt/homebrew/bin:$HOME/.local/bin:$HOME/.docker/bin:/Applications/Docker.app/Contents/Resources/bin:/Applications/OrbStack.app/Contents/MacOS/xbin:$PATH"
 runtime=auto
+guest_platform=${FORK_PLATFORM:-linux/amd64}
 build=1
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --runtime)
       [ "$#" -ge 2 ] || { echo '--runtime needs auto, existing, orbstack, or docker-desktop' >&2; exit 2; }
       runtime=$2; shift 2 ;;
+    --platform)
+      [ "$#" -ge 2 ] || { echo '--platform needs linux/amd64 or linux/arm64' >&2; exit 2; }
+      guest_platform=$2; shift 2 ;;
     --skip-build) build=0; shift ;;
     --help|-h)
       cat <<'HELP'
-Usage: bash scripts/install.sh [--runtime auto|existing|orbstack|docker-desktop] [--skip-build]
+Usage: bash scripts/install.sh [--runtime auto|existing|orbstack|docker-desktop] [--platform linux/amd64|linux/arm64] [--skip-build]
 
-Prepare macOS 14+ on Apple Silicon to run Debian ARM64 desktops.
+Prepare macOS 14+ on Apple Silicon to run x86-64 Debian desktops.
+Use --platform linux/arm64 for native ARM guests instead.
 Requires uv 0.12.1+; missing or older uv is installed/upgraded.
 Reuses the active Docker context; auto installs OrbStack only when no runtime exists.
 Installs missing Homebrew/uv, Python 3.12, locked runtime dependencies, and local CA.
@@ -26,9 +31,10 @@ HELP
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
+case "$guest_platform" in linux/amd64|linux/arm64) ;; *) echo "Unsupported guest platform: $guest_platform" >&2; exit 2 ;; esac
 case "$runtime" in auto|existing|orbstack|docker-desktop) ;; *) echo "Unsupported runtime: $runtime" >&2; exit 2 ;; esac
 if [ "$(uname -s)" != Darwin ] || [ "$(uname -m)" != arm64 ]; then
-  echo 'Run this installer in a native Apple Silicon macOS terminal. Desktops run Debian ARM64.' >&2
+  echo 'Run this installer in a native Apple Silicon macOS terminal. Default desktops run x86-64 Debian.' >&2
   exit 1
 fi
 macos_version=$(sw_vers -productVersion)
@@ -95,8 +101,8 @@ if [ ! -e .env ]; then
 fi
 bash scripts/setup-ca.sh
 if [ "$build" -eq 1 ]; then
-  make branch-build
-  bash scripts/doctor.sh
+  FORK_PLATFORM="$guest_platform" make branch-build
+  FORK_PLATFORM="$guest_platform" bash scripts/doctor.sh
 fi
 cat <<'DONE'
 Setup complete. Start a desktop with:

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM --platform=linux/arm64 debian:bookworm-slim
+FROM debian:bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8
 
 # Desktop, a11y, browser, tooling. chromium here is Debian's .deb (152.x on 2026-09-08), NOT a snap.
@@ -12,7 +12,7 @@ RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
       curl ca-certificates jq procps gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-# Node 22 (NodeSource publishes arm64). Debian's nodejs is 18 — too old for playwright-core >=1.50.
+# Node 22 (NodeSource publishes amd64 and arm64). Debian's nodejs is 18 — too old for playwright-core >=1.50.
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y -qq --no-install-recommends nodejs && rm -rf /var/lib/apt/lists/*
 

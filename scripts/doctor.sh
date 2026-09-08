@@ -5,7 +5,7 @@ export PATH="/opt/homebrew/bin:$HOME/.local/bin:$HOME/.docker/bin:/Applications/
 fail=0
 check() { if "$@" >/dev/null 2>&1; then printf 'OK: %s\n' "$*"; else printf 'MISSING: %s\n' "$*"; fail=1; fi; }
 if [ "$(uname -s)" != Darwin ] || [ "$(uname -m)" != arm64 ]; then
-  echo 'This host installer supports Apple Silicon macOS. Guest desktops use Debian ARM64.' >&2
+  echo 'This host installer supports Apple Silicon macOS. Guest desktops default to x86-64 Debian.' >&2
   exit 1
 fi
 check command -v uv
@@ -22,5 +22,11 @@ fi
 check test -s env/proxy/mitmproxy-ca-cert.pem
 check docker image inspect fork-base:latest
 check docker image inspect fork-branch:latest
+expected_platform=${FORK_PLATFORM:-linux/amd64}
+if docker image inspect fork-branch:latest >/dev/null 2>&1; then
+  actual_platform=$(docker image inspect --format '{{.Os}}/{{.Architecture}}' fork-branch:latest)
+  printf 'Desktop image platform: %s (expected %s)\n' "$actual_platform" "$expected_platform"
+  check test "$actual_platform" = "$expected_platform"
+fi
 printf 'API credentials are optional for desktop setup; configure OPENAI_API_KEY in .env to run the agent.\n'
 exit "$fail"
