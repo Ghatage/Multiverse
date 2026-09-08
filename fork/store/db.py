@@ -226,7 +226,7 @@ class Store:
         evidence=None,
         ts=None,
     ):
-        if source not in {"model", "replay", "repair"}:
+        if source not in {"model", "replay", "repair", "scripted"}:
             raise ValueError("Invalid step source")
         values = (
             run_id,

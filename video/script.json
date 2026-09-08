@@ -1,0 +1,9 @@
+[
+  "What if computer use had version control?",
+  "Multiverse is a complete harness for computer use across containers. One starting state becomes independent Debian desktops.",
+  "Try different approaches in parallel. Work in native applications like Inkscape. Compare the outcomes, and keep the version that meets the task.",
+  "Every recorded state and transition joins the graph. See how paths branch, where they fail, and which steps they share.",
+  "When a verified path matches the task, replay it. Reuse the work already recorded instead of rebuilding the same sequence.",
+  "Need another attempt? Return to a saved checkpoint and branch again. Rewind restores supported saved state.",
+  "Automate the desktop. Explore alternatives. Reuse what works. Multiverse."
+]
