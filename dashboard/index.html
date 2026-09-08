@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark"><title>Multiverse · Execution explorer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath fill='none' stroke='%23b9acd9' stroke-width='3' d='M10 30V12m0 10 20-10M10 22l20 8'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script defer src="/assets/vendor/3d-force-graph-1.80.0.min.js"></script>
+  <script defer src="/assets/app.js"></script>
+</head>
+<body>
+  <header class="header">
+    <a class="brand" href="/" aria-label="Multiverse home"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M7 22V6m0 11 14-10M7 17l14 5"/><circle cx="7" cy="6" r="2"/><circle cx="21" cy="7" r="2"/><circle cx="21" cy="22" r="2"/></svg><strong>multiverse</strong><span class="brand-divider"></span><span class="brand-caption">Execution explorer</span></a>
+    <div class="header-right"><span id="workspace-label">Local workspace</span><span id="connection" class="connection"><i></i>Connecting</span><button id="toggle-grid" class="button secondary" aria-expanded="false" aria-controls="desktops">Desktops <span id="desktop-count" class="count">0</span></button></div>
+  </header>
+  <div id="warning" class="warning" hidden role="status"></div>
+  <main class="workspace">
+    <aside class="sidebar">
+      <div class="sidebar-top"><span class="eyebrow">RECORDED RUNS</span><span id="run-count" class="subtle">0</span></div>
+      <label class="select-label" for="branch-filter">Branch</label>
+      <select id="branch-filter"><option value="">All branches</option></select>
+      <label class="select-label" for="run-filter">Run</label>
+      <select id="run-filter"><option value="">All runs</option></select>
+      <button id="clear-selection" class="text-button">Show all paths <span>↗</span></button>
+      <div id="run-list" class="run-list" aria-label="Recorded runs"></div>
+      <div class="sidebar-foot"><span class="eyebrow">RECORDING LEVEL</span><p>Tool calls <span class="subtle">+ recorded actions</span></p><p class="muted small">One tool call can contain several actions.</p></div>
+    </aside>
+    <section class="center">
+      <div class="metrics" id="metrics" aria-label="Recording metrics"></div>
+      <section class="graph-panel" aria-label="Interactive three dimensional execution graph">
+        <div class="graph-heading"><div><div class="eyebrow">LIVE EXECUTION MAP <span class="mini-badge">3D</span></div><h1>Execution space</h1><p id="graph-summary">Waiting for recordings</p></div><div class="graph-actions"><button class="icon-button" id="fit" title="Fit graph to view" aria-label="Fit graph to view">⛶</button><button class="icon-button" id="reset-camera" title="Reset camera" aria-label="Reset camera">↺</button></div></div>
+        <div id="graph" tabindex="0" aria-label="3D graph. Drag to orbit, scroll to zoom, right-drag to pan. Select runs or timeline entries to inspect without a mouse."></div>
+        <div id="node-labels" aria-hidden="true"></div>
+        <div id="graph-empty" class="graph-empty" hidden><div class="empty-symbol">⋈</div><h2>No recorded states yet</h2><p>Run history appears here when observations are available.</p><p class="small" id="empty-detail"></p></div>
+        <div class="graph-bottom"><div class="legend" aria-label="Transition status legend"><span><i class="succeeded"></i>Verified</span><span><i class="failed"></i>Failed</span><span><i class="pending"></i>Pending</span><span><i class="unverified"></i>Unverified</span><span><i class="gap"></i>Gap</span></div><span class="navigation-hint">Drag orbit · Scroll zoom · Right-drag pan</span></div>
+      </section>
+      <section class="timeline" aria-label="Recorded evidence playback">
+        <div class="timeline-heading"><span class="eyebrow">PATH TIMELINE</span><span id="timeline-caption">All recorded tool calls</span><span class="playback-note">Visual playback only</span></div>
+        <div class="timeline-controls"><button id="play" class="play-button" aria-label="Play recorded evidence" title="Play recorded evidence">▶</button><button id="previous" class="icon-button" aria-label="Previous tool call">‹</button><input id="scrubber" type="range" min="0" max="0" value="0" aria-label="Recorded tool call position" disabled><button id="next" class="icon-button" aria-label="Next tool call">›</button><span id="position">0 / 0</span></div>
+        <div id="timeline-steps" class="timeline-steps" aria-label="Ordered tool calls"></div>
+      </section>
+    </section>
+    <aside class="inspector" aria-label="Execution inspector">
+      <div class="inspector-tabs" role="tablist"><button id="inspect-tab" role="tab" aria-selected="true" aria-controls="inspect-content">Inspector</button><button id="events-tab" role="tab" aria-selected="false" aria-controls="events-content">Events <span id="event-count"></span></button></div>
+      <div id="inspect-content" role="tabpanel" class="inspector-content"></div>
+      <div id="events-content" role="tabpanel" class="inspector-content" hidden></div>
+    </aside>
+  </main>
+  <section id="desktops" class="desktops" hidden aria-label="Live desktops"><div class="desktop-heading"><div><span class="eyebrow">LIVE DESKTOPS</span><p>View-only previews · Steering reaches the active agent</p></div><span class="muted small">Desktop state is separate from timeline playback</span></div><div id="grid" class="desktop-grid"></div></section>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <noscript>This dashboard requires JavaScript to display recorded paths.</noscript>
+</body>
+</html>

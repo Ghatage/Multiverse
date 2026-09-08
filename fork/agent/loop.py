@@ -49,6 +49,10 @@ def load_task(path: Path, branch: str) -> dict:
 
 
 def check_task(task: dict, branch: str, base="http://localhost:3000") -> dict:
+    if task.get("osworld_task") == "008":
+        from fork.osworld008 import check
+
+        return check(branch)
     if "expected" not in task:
         return {"pass": None, "errors": []}
     try:
@@ -101,6 +105,7 @@ def run_task(
     judge: bool = False,
     judge_runner=None,
     store=None,
+    resume: bool = False,
 ) -> dict:
     validate_name(branch)
     if effort not in {"low", "medium", "high", "xhigh", "max"}:
@@ -292,6 +297,13 @@ def run_task(
             )
             initial = executor.execute(
                 {
+                    "name": "observe",
+                    "call_id": "resume",
+                    "arguments": '{"mode":"both"}',
+                }
+                if resume
+                else
+                {
                     "name": "exec_js",
                     "call_id": "bootstrap",
                     "arguments": json.dumps(
@@ -299,6 +311,7 @@ def run_task(
                     ),
                 }
             )
+            log.write(kind="lifecycle", step=None, mode="resume" if resume else "start")
             if hooks:
                 hooks.on_run_start(branch)
             inp = [

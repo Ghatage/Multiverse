@@ -104,6 +104,7 @@ def race(
                 effort=variant["effort"],
                 extra_instructions=variant.get("hint", ""),
                 judge=judge,
+                resume=True,
                 caps=Caps(max_turns, remaining, max_cost_usd / len(variants)),
                 cancel=cancel,
             )

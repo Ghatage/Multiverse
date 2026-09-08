@@ -1,8 +1,18 @@
 const fs = require('fs/promises');
+const {execFile} = require('child_process');
+const {promisify} = require('util');
+const runFile = promisify(execFile);
 async function read(path) { try { return JSON.parse(await fs.readFile(path,'utf8')); } catch(e) { if(e.code==='ENOENT') return null; throw e; } }
 async function write(path,data) { await fs.writeFile(path+'.tmp',JSON.stringify(data)); await fs.rename(path+'.tmp',path); }
 async function checkpoint(js,py,{label}={}) {
   await js.ensure();
+  if (process.env.FORK_OSWORLD_TASK) {
+    await Promise.all(js.ctx.context.pages().map(page => page.waitForLoadState('networkidle', {timeout:10000})));
+    const storage = await js.ctx.context.storageState();
+    storage.sessions = await Promise.all(js.ctx.context.pages().filter(p=>p.url().startsWith('http')).map(async page => ({url:page.url(), values:await page.evaluate(()=>Object.fromEntries(Object.entries(sessionStorage).filter(([key])=>key!=="__fork_storage_restored")))})));
+    await write('/state/browser-storage.json', storage);
+    await runFile('python3', ['/opt/fork/osworld/state.py', 'snapshot'], {timeout:45000});
+  }
   const tabs=js.ctx.context.pages().filter(p=>p.url()!=='about:blank').map(p=>({url:p.url(),active:p===js.page()}));
   const vars=js.vars(), pyvars=await py.call('dump_vars'), ts=new Date().toISOString();
   await fs.mkdir('/state',{recursive:true});
