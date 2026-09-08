@@ -1,0 +1,50 @@
+rounded = 0
+border_width = 0
+background_color = #eef0fa 100
+border_color = #ffffff 60
+
+# Display-only control, using the existing panel palette.
+rounded = 6
+border_width = 1
+background_color = #e1e4ee 100
+border_color = #c9cedc 100
+
+panel_items = EPFSC
+panel_size = 100% 30
+panel_position = top center horizontal
+panel_padding = 18 2 10
+panel_background_id = 1
+panel_layer = top
+strut_policy = follow_size
+panel_monitor = all
+font_shadow = 0
+scale_relative_to_dpi = 0
+separator = empty
+separator_size = 0
+clock_font_color = #303344 100
+time1_format = %a %b %d    %H:%M
+time1_font = DejaVu Sans 10
+clock_padding = 6 0
+systray_padding = 4 0 6
+systray_icon_size = 18
+systray_background_id = 0
+
+execp = new
+execp_command = /bin/sh /opt/fork/repl/desktop/branch-label.sh
+execp_interval = 0
+execp_font = DejaVu Sans Bold 10
+execp_font_color = #303344 100
+execp_padding = 2 0
+
+button = new
+button_text = Take control
+button_tooltip = Display only
+button_font = DejaVu Sans 10
+button_font_color = #727989 100
+button_background_id = 2
+button_padding = 10 2
+button_lclick_command = /bin/true
+button_mclick_command = /bin/true
+button_rclick_command = /bin/true
+button_uwheel_command = /bin/true
+button_dwheel_command = /bin/true
