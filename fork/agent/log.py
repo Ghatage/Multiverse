@@ -1,6 +1,7 @@
 """Flush one JSONL record per model response and tool action; screenshots are files."""
 
 import base64
+import hashlib
 import json
 import os
 import secrets
@@ -86,6 +87,25 @@ class RunLogger:
             purpose=purpose,
             backend=self.backend,
         )
+
+    def observation(self, value: dict, step: int, side: str) -> dict:
+        relative = f"observations/{step:03d}-{side}.txt"
+        path = self.path / relative
+        path.parent.mkdir(exist_ok=True)
+        content = value.get("tree", "").encode()
+        with path.open("wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        return {
+            "path": relative,
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "size_bytes": len(content),
+            "complete": bool(content)
+            and value.get("target") != "desktop"
+            and "(truncated " not in value.get("tree", ""),
+            "scope": "tool_observation",
+        }
 
     def screenshot(self, b64: str, step: int, index: int = 0) -> str:
         data = base64.b64decode(b64, validate=True)

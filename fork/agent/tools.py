@@ -67,6 +67,7 @@ class ToolExecutor:
         approval_waiter: Callable | None = None,
         task_prompt: str = "",
         deadline: float | None = None,
+        store=None,
     ):
         self.branch, self.repl, self.policy, self.log = branch, repl, policy, logger
         self.gate, self.approval_waiter, self.task_prompt = (
@@ -75,13 +76,16 @@ class ToolExecutor:
             task_prompt,
         )
         self.deadline = deadline
+        self.store = store
         self.last_observation: dict = {}
         self.unchanged_count = 0
         self.history: list[dict] = []
 
     def _observe(self, mode="tree") -> dict:
         return self.repl.call(
-            "observe", mode=mode, max_tree_chars=self.policy.max_tree_chars
+            "observe",
+            mode=mode,
+            max_tree_chars=max(2_000_000, self.policy.max_tree_chars),
         )
 
     def execute(self, call: dict) -> dict:
@@ -211,6 +215,8 @@ class ToolExecutor:
             for index, value in enumerate(images)
         ]
         relative = paths[0] if paths else None
+        before_evidence = self.log.observation(pre, step, "before")
+        after_evidence = self.log.observation(post, step, "after")
         self.log.write(
             kind="tool",
             step=step,
@@ -231,9 +237,43 @@ class ToolExecutor:
             tree_sha_after=tree_hash(post),
             screenshot=relative,
             screenshots=paths,
+            tree_before=before_evidence,
+            tree_after=after_evidence,
             tokens=None,
             cost_usd=None,
         )
+        if self.store is not None:
+            with self.store.transaction():
+                before_node = (
+                    self.store.node_for(pre["tree"])[0]
+                    if before_evidence["complete"]
+                    else None
+                )
+                after_node = (
+                    self.store.node_for(post["tree"])[0]
+                    if after_evidence["complete"]
+                    else None
+                )
+                self.store.record_step(
+                    self.log.run_id,
+                    step,
+                    before_node,
+                    after_node,
+                    "model",
+                    name,
+                    code,
+                    None,
+                    round((time.monotonic() - start) * 1000),
+                    None,
+                    None,
+                    None,
+                    evidence={
+                        "before": before_evidence,
+                        "after": after_evidence,
+                        "coverage": "tool_level",
+                        "action_checkpoints": "unavailable",
+                    },
+                )
         text = (
             json.dumps(
                 {
@@ -245,7 +285,14 @@ class ToolExecutor:
                 default=str,
             )
             + "\n---\n"
-            + post.get("tree", "")
+            + (
+                post.get("tree", "")[: self.policy.max_tree_chars]
+                + (
+                    "\n(truncated for model output)"
+                    if len(post.get("tree", "")) > self.policy.max_tree_chars
+                    else ""
+                )
+            )
         )
         if self.unchanged_count >= 3:
             text += "\nThe page did not change after three consecutive actions. Inspect and adjust your approach."

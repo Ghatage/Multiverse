@@ -19,6 +19,7 @@ exclude-newer = "2026-09-09T00:00:00Z"
 [project.scripts]
 cu = "fork.cu.cli:app"
 fork-agent = "fork.agent.cli:app"
+fork-store = "fork.store.cli:app"
 
 [build-system]
 requires = ["setuptools>=75"]
@@ -26,3 +27,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["fork*", "env.scripts*"]
+
+[tool.setuptools.package-data]
+"fork.store" = ["schema.sql"]

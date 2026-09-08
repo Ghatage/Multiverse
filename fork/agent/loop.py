@@ -3,6 +3,7 @@
 import json
 import os
 import random
+import sqlite3
 import time
 from collections.abc import Callable
 from contextlib import nullcontext
@@ -99,6 +100,7 @@ def run_task(
     extra_instructions: str = "",
     judge: bool = False,
     judge_runner=None,
+    store=None,
 ) -> dict:
     validate_name(branch)
     if effort not in {"low", "medium", "high", "xhigh", "max"}:
@@ -271,6 +273,12 @@ def run_task(
                     repl_url = f"http://localhost:{state.ports['repl']}"
                 repl = ReplClient(repl_url, timeout_s=min(60, caps.max_wall_s))
             budget()
+            (log.path / "task.json").write_text(json.dumps(task, indent=2) + "\n")
+            if store is not False:
+                from fork.store.db import Store
+
+                store = store or Store(artifact_root=log.path.parent)
+                store.record_run(log.run_id, task["id"], branch, "cold", effort)
             executor = ToolExecutor(
                 branch,
                 repl,
@@ -280,6 +288,7 @@ def run_task(
                 approval_waiter,
                 task["prompt"],
                 deadline,
+                store=store if store is not False else None,
             )
             initial = executor.execute(
                 {
@@ -522,6 +531,7 @@ def run_task(
         KeyError,
         TypeError,
         AttributeError,
+        sqlite3.Error,
     ) as exc:
         error = f"{type(exc).__name__}: {exc}"
         reason = "error"
@@ -532,4 +542,13 @@ def run_task(
         result = checker(task, branch) if checker else check_task(task, branch)
     except Exception as exc:  # noqa: BLE001 - persist summary when an injected checker fails
         result = {"pass": False, "errors": [f"Checker failed: {type(exc).__name__}"]}
-    return log.finish(reason, text=text, checker=result, error=error)
+    summary = log.finish(reason, text=text, checker=result, error=error)
+    if store not in (None, False):
+        from fork.store.ingest import ingest_run
+
+        try:
+            ingest_run(store, log.path)
+        except (ValueError, RuntimeError, OSError, sqlite3.Error) as exc:
+            summary["store_error"] = f"{type(exc).__name__}: {exc}"
+            (log.path / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    return summary

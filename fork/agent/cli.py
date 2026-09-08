@@ -1,6 +1,7 @@
 """Run a task on one branch with HTTP or WebSocket model transport."""
 
 import json
+import sqlite3
 from pathlib import Path
 from typing import Annotated
 
@@ -78,13 +79,19 @@ def run(
             if json_output
             else f"{result['run_id']}: {result['stop_reason']}; "
             f"{result['steps']} tool steps; estimated ${result['cost_usd']:.4f}; checker={result['checker']['pass']}"
+            + (
+                f"; store error: {result['store_error']}"
+                if result.get("store_error")
+                else ""
+            )
         )
         if (
             result["stop_reason"] != "final_answer"
             or result["checker"]["pass"] is False
+            or result.get("store_error")
         ):
             raise typer.Exit(1)
-    except (ValueError, OSError, httpx.HTTPError) as exc:
+    except (ValueError, OSError, sqlite3.Error, httpx.HTTPError) as exc:
         typer.echo(
             json.dumps({"error": str(exc)}) if json_output else f"Error: {exc}",
             err=not json_output,
@@ -156,7 +163,7 @@ def race_command(
         )
         if not result["winner"]:
             raise typer.Exit(1)
-    except (ValueError, RuntimeError, OSError) as exc:
+    except (ValueError, RuntimeError, OSError, sqlite3.Error) as exc:
         typer.echo(
             json.dumps({"error": str(exc)}) if json_output else str(exc),
             err=not json_output,
