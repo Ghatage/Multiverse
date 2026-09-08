@@ -67,6 +67,54 @@ def atspi_tree(max_depth=12, max_chars=20000):
     return text
 
 
+def inventory():
+    """Read every accessible application without changing focus or window state."""
+    applications = []
+    for app in pyatspi.Registry.getDesktop(0):
+        lines = []
+        unavailable = []
+
+        def walk(node, depth, lines=lines, unavailable=unavailable):
+            if depth > 40 or len(lines) >= 100000:
+                unavailable.append("tree_limit")
+                return
+            try:
+                lines.append(" " * depth + f'{node.getRoleName()} "{node.name}"')
+                for child in node:
+                    walk(child, depth + 1)
+            except Exception as exc:  # noqa: BLE001 - disappearing AT-SPI nodes are explicit evidence gaps
+                unavailable.append(type(exc).__name__)
+
+        try:
+            walk(app, 0)
+            applications.append(
+                {
+                    "name": app.name,
+                    "pid": app.get_process_id(),
+                    "tree": "\n".join(lines),
+                    "complete": not unavailable,
+                    "unavailable": unavailable,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - disappearing AT-SPI nodes are explicit evidence gaps
+            applications.append(
+                {"complete": False, "unavailable": [type(exc).__name__]}
+            )
+    try:
+        windows = subprocess.check_output(["wmctrl", "-lpGx"], text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        windows = None
+    return {
+        "apps": applications,
+        "windows": windows,
+        "active_window": active_window(),
+        "pointer": list(pyautogui.position()),
+        "scope": "discoverable_atspi_apps",
+        "excluded": ["process_memory", "unsaved_app_state"],
+        "captured_at": time.time(),
+    }
+
+
 globals_ = {
     "pyautogui": pyautogui,
     "time": time,
@@ -120,6 +168,8 @@ for line in sys.stdin:
                         if k not in reserved and not k.startswith("__")
                     }
                 )
+            elif method == "inventory":
+                result = inventory()
             elif method == "active_window":
                 result = active_window()
             elif method == "atspi_tree":

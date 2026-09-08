@@ -150,11 +150,22 @@ def _put(con, row: dict):
 def _candidate(store, data, action_id=None):
     with store.connection() as con:
         old = con.execute(
-            "SELECT payload_json,action_id FROM checkpoint_candidates WHERE id=?",
+            "SELECT payload_json,action_id,status FROM checkpoint_candidates WHERE id=?",
             (data["id"],),
         ).fetchone()
         payload = encoded(data)
-        if old and tuple(old) != (payload, action_id):
+        if old and old["status"] == "reserved":
+            reserved = json.loads(old["payload_json"])
+            if old["action_id"] != action_id or any(
+                data.get(key) != value for key, value in reserved.items()
+            ):
+                raise ValueError("Conflicting checkpoint reservation")
+            con.execute(
+                "UPDATE checkpoint_candidates SET payload_json=?,status='pending' WHERE id=?",
+                (payload, data["id"]),
+            )
+            return
+        if old and (old["payload_json"], old["action_id"]) != (payload, action_id):
             raise ValueError("Conflicting checkpoint candidate")
         con.execute(
             "INSERT OR IGNORE INTO checkpoint_candidates(id,action_id,payload_json,created) VALUES (?,?,?,?)",
@@ -285,6 +296,27 @@ def publish(store, action_id: str, checkpoint: dict, post_evidence: dict, outcom
     return row["id"]
 
 
+def _baseline_continuity(con, previous, action) -> bool:
+    target = previous["post_checkpoint_id"]
+    cursor = action["pre_checkpoint_id"]
+    seen = set()
+    while cursor != target:
+        if not cursor or cursor in seen:
+            return False
+        seen.add(cursor)
+        row = con.execute("SELECT * FROM checkpoints WHERE id=?", (cursor,)).fetchone()
+        if (
+            not row
+            or row["action_id"] is not None
+            or row["status"] != "committed"
+            or row["run_id"] != action["run_id"]
+            or row["incarnation"] != action["incarnation"]
+        ):
+            return False
+        cursor = row["parent_id"]
+    return True
+
+
 def link_actions(con, edge_id: str, action_ids):
     if len(set(action_ids)) != len(action_ids):
         raise ValueError("Duplicate edge action")
@@ -309,7 +341,7 @@ def link_actions(con, edge_id: str, action_ids):
             }:
                 raise ValueError("Checkpoint fidelity does not support recovery")
         if prior and (
-            action["pre_checkpoint_id"] != prior["post_checkpoint_id"]
+            not _baseline_continuity(con, prior, action)
             or action["incarnation"] != prior["incarnation"]
             or action["run_id"] != prior["run_id"]
             or action["call_id"] != prior["call_id"]
@@ -331,3 +363,28 @@ def link_actions(con, edge_id: str, action_ids):
         "UPDATE edges SET recovery_status='filesystem_checkpoints',verification_scope='actions' WHERE id=?",
         (edge_id,),
     )
+
+
+def reserve_checkpoint(store, data: dict, action_id: str | None = None) -> None:
+    """Retain a proposed image name even if capture fails before its manifest exists."""
+    if set(data) != {
+        "id",
+        "branch",
+        "run_id",
+        "incarnation",
+        "image",
+    } or not re.fullmatch(r"ck_[0-9a-f]{8}", data["id"]):
+        raise ValueError("Invalid checkpoint reservation")
+    with store.transaction() as con:
+        old = con.execute(
+            "SELECT payload_json,action_id FROM checkpoint_candidates WHERE id=?",
+            (data["id"],),
+        ).fetchone()
+        if old:
+            if tuple(old) != (encoded(data), action_id):
+                raise ValueError("Conflicting checkpoint reservation")
+            return
+        con.execute(
+            "INSERT INTO checkpoint_candidates(id,action_id,payload_json,status,created) VALUES (?,?,?,'reserved',?)",
+            (data["id"], action_id, encoded(data), now()),
+        )

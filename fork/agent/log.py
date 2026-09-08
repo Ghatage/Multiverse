@@ -116,7 +116,9 @@ class RunLogger:
         (self.path / relative).write_bytes(data)
         return relative
 
-    def finish(self, reason: str, *, text="", checker=None, error=None) -> dict:
+    def finish(
+        self, reason: str, *, text="", checker=None, error=None, extra=None
+    ) -> dict:
         summary = {
             "run_id": self.run_id,
             "task_id": self.task_id,
@@ -137,6 +139,7 @@ class RunLogger:
             "seed": self.seed,
             "error": error,
         }
+        summary.update(extra or {})
         (self.path / "summary.json").write_text(
             json.dumps(summary, indent=2, allow_nan=False) + "\n"
         )
