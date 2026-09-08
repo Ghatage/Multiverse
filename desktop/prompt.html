@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self'; script-src 'self'"
+    />
+    <title>Give your desktop a task</title>
+    <link rel="stylesheet" href="prompt.css" />
+  </head>
+  <body>
+    <label for="prompt">What should happen on the virtual desktop?</label>
+    <textarea
+      id="prompt"
+      autofocus
+      maxlength="16000"
+      placeholder="Type or dictate a task…"
+    ></textarea>
+    <footer>
+      <span id="hint" role="status">Enter to start · Esc to dismiss</span>
+      <button id="submit" aria-label="Transfer and start task" disabled>↵</button>
+    </footer>
+    <script src="prompt.js"></script>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "name": "multiverse-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Transfer your browser workspace to Multiverse",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check main.cjs && node --check preload.cjs && node --check renderer.js && node --check handoff-motion.cjs && node --check motion-preload.cjs && node --check motion.js && node --check prompt.js",
+    "package": "node package-app.cjs",
+    "test:shortcut": "node build-native.cjs"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^44.3.0"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}

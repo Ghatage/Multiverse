@@ -1,0 +1,4 @@
+node_modules/
+out/
+runtime-config.json
+native/option-trigger

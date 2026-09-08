@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Multiverse Desktop Handoff",
+  "version": "0.1.0",
+  "description": "Capture Chrome workspace metadata on demand for your local Multiverse app.",
+  "minimum_chrome_version": "120",
+  "permissions": ["tabs", "scripting", "storage", "alarms"],
+  "host_permissions": ["http://127.0.0.1:17866/*"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": {"service_worker": "background.js", "type": "module"},
+  "action": {"default_title": "Pair Multiverse / manage site access"},
+  "options_ui": {"page": "options.html", "open_in_tab": true},
+  "content_security_policy": {"extension_pages": "script-src 'self'; object-src 'self'; connect-src ws://127.0.0.1:17866 http://127.0.0.1:17866"}
+}

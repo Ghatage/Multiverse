@@ -1,0 +1,1 @@
+{"private":true,"type":"module","scripts":{"test":"node --test capture.test.js","check":"node --check background.js && node --check capture.js && node --check options.js"}}

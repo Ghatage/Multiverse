@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Multiverse handoff</title><link rel="stylesheet" href="options.css"></head>
+<body><main>
+  <h1>Connect Chrome to Multiverse</h1>
+  <p>Chrome tabs transfer when you click Transfer in the desktop app. Grant individual sites access to include scroll position and HTML video time.</p>
+  <form id="pair"><label for="token">Pairing token from the desktop app</label><input id="token" type="password" required autocomplete="off" spellcheck="false"><button type="submit">Pair / reconnect</button></form>
+  <p id="status" role="status">Checking connection…</p>
+  <button id="unpair" class="secondary">Disconnect and forget token</button>
+  <h2>Page state access</h2>
+  <p>Choose an open website below. URLs and titles are captured without this extra access. Cookies, passwords, and form contents are never captured.</p>
+  <div id="sites"></div>
+  <p>Video capture supports standard HTML video in the main page. Embedded players, protected pages, and site-specific players may transfer only the URL.</p>
+</main><script type="module" src="options.js"></script></body>
+</html>

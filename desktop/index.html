@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; frame-src http://127.0.0.1:* http://localhost:*; style-src 'self'; script-src 'self';"
+    />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Multiverse</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <span class="mark">M</span> Multiverse
+        <span class="badge">DESKTOP PREVIEW</span>
+      </div>
+      <span id="service" class="muted">Starting local service…</span>
+    </header>
+    <main>
+      <div class="intro">
+        <div>
+          <div class="eyebrow">YOUR WORK, ANOTHER PLACE</div>
+          <h1>Take your desktop with you.</h1>
+          <p>Capture Chrome. Open the same workspace in a virtual desktop.</p>
+        </div>
+        <div class="actions">
+          <button id="capture">Preview capture</button
+          ><button id="transfer" class="primary" disabled>
+            <span id="transfer-label">Transfer desktop</span> <kbd>⌃⇧Space</kbd>
+          </button>
+        </div>
+      </div>
+      <section class="task-composer" aria-label="Task for the virtual desktop">
+        <label for="task-prompt">What should happen after the transfer?</label>
+        <textarea
+          id="task-prompt"
+          rows="2"
+          maxlength="16000"
+          placeholder="For example: read these tabs and write a short comparison in a document on the desktop."
+        ></textarea>
+        <div class="task-controls">
+          <span id="task-hint"
+            >Optional. Add a prompt, then transfer. Or start a task once the
+            desktop is ready.</span
+          >
+          <button id="run-task" hidden>Run on this desktop</button>
+          <button id="stop-task" hidden>Stop task</button>
+        </div>
+        <div id="task-progress" hidden aria-live="polite"></div>
+        <pre id="task-result" hidden></pre>
+      </section>
+      <div class="workspace">
+        <section class="source">
+          <div class="panel-title">
+            <span><i class="dot"></i> Current display</span
+            ><span id="tab-count" class="muted">Ready to capture</span>
+          </div>
+          <div class="preview">
+            <img id="screenshot" hidden alt="Captured source desktop" />
+            <div id="source-empty" class="empty">
+              <span class="icon">▣</span>
+              <h2>Your starting point</h2>
+              <p>
+                One capture brings your browser tabs<br />into a new workspace.
+              </p>
+            </div>
+          </div>
+          <div id="tabs" class="tabs"></div>
+        </section>
+        <section class="destination">
+          <div class="panel-title">
+            <span><i class="dot purple"></i> Virtual desktop</span
+            ><span id="branch" class="muted">No workspace yet</span>
+          </div>
+          <div id="destination-empty" class="empty">
+            <span class="icon">↗</span>
+            <h2>Room to keep going.</h2>
+            <p>
+              Your transferred desktop will appear here.<br />A checkpoint
+              preserves the starting state.
+            </p>
+          </div>
+          <div id="transfer-ghost" hidden>
+            <img id="transfer-image" alt="Source desktop being transferred" />
+            <span>Restoring your workspace…</span>
+          </div>
+          <iframe
+            id="viewer"
+            hidden
+            title="Multiverse virtual desktop"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock"
+            allow="fullscreen; clipboard-read; clipboard-write"
+          ></iframe>
+        </section>
+      </div>
+      <footer>
+        <p id="shortcut-status">Starting shortcut…</p>
+        <div class="status-row">
+          <span id="status">Capture your desktop to begin.</span
+          ><span id="checkpoint"></span>
+        </div>
+        <div id="warnings"></div>
+        <details>
+          <summary>
+            Browser extension · <span id="extension-status">not connected</span>
+          </summary>
+          <p>
+            Optional: load <code>extension/</code> in Chrome to transfer video
+            position and scroll. Enter this pairing token in the extension:
+          </p>
+          <code id="pair-token"></code>
+          <p>
+            Only public web pages are restored. Logins, unsaved edits, and
+            running applications stay on this Mac.
+          </p>
+        </details>
+        <button class="text-button" id="permissions">
+          Screen Recording settings
+        </button>
+      </footer>
+    </main>
+    <script src="renderer.js"></script>
+  </body>
+</html>
