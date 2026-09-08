@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import asdict, is_dataclass
 
 from fork import locks
+from fork.actions import CheckpointFailure
 from fork.agent.log import RunLogger
 from fork.agent.policy import ObservationPolicy
 from fork.repl_client import ReplError
@@ -52,6 +53,21 @@ TOOLS = [
 ]
 
 
+ACTION_TOOLS = [
+    tool(
+        "action",
+        "Perform exactly one action, with mandatory before/after desktop screenshots and filesystem checkpoints. "
+        "arguments is a JSON object encoded as a string. Browser selectors use Playwright CSS or text selectors. "
+        "Operations and arguments: goto {url}, click {selector}, fill {selector,text}, press {selector,key}, "
+        "select {selector,value}, check/uncheck {selector}, scroll {x,y}, new_tab/close_tab {}, activate_tab {index}; "
+        "desktop_click {x,y}, desktop_type {text} (ASCII), desktop_press {key}, desktop_hotkey {keys:[...]}, desktop_scroll {amount}. "
+        "No scripts or shell execution. One invocation per click; observe to inspect all results.",
+        {"operation": {"type": "string"}, "arguments": {"type": "string"}},
+    ),
+    TOOLS[-1],
+]
+
+
 def tree_hash(observation: dict) -> str:
     return hashlib.sha256(observation.get("tree", "").encode()).hexdigest()
 
@@ -68,6 +84,7 @@ class ToolExecutor:
         task_prompt: str = "",
         deadline: float | None = None,
         store=None,
+        checkpointed=False,
     ):
         self.branch, self.repl, self.policy, self.log = branch, repl, policy, logger
         self.gate, self.approval_waiter, self.task_prompt = (
@@ -77,6 +94,11 @@ class ToolExecutor:
         )
         self.deadline = deadline
         self.store = store
+        self.coordinator = None
+        if checkpointed:
+            from fork.actions import ActionCoordinator
+
+            self.coordinator = ActionCoordinator(branch, repl, store, logger)
         self.last_observation: dict = {}
         self.unchanged_count = 0
         self.history: list[dict] = []
@@ -96,7 +118,12 @@ class ToolExecutor:
         pre = post = self.last_observation
         result: dict = {}
         error = None
+        fatal_error = None
         screenshot = None
+        local_before = local_after = None
+        action_ids = []
+        if self.coordinator:
+            self.coordinator.ids = []
         verdict = {
             "decision": "allow",
             "category": "none",
@@ -105,12 +132,29 @@ class ToolExecutor:
         start = time.monotonic()
         try:
             args = json.loads(call.get("arguments", "{}"))
-            if name not in {"exec_js", "exec_py", "observe"} or not isinstance(
-                args, dict
-            ):
+            if name not in {
+                "exec_js",
+                "exec_py",
+                "observe",
+                "action",
+            } or not isinstance(args, dict):
                 raise ValueError("Unknown tool or invalid arguments")
+            if self.coordinator and name.startswith("exec_"):
+                raise ValueError(
+                    "Checkpointed runs require individual action calls; arbitrary scripts are disabled"
+                )
+            if name == "action":
+                if not self.coordinator or set(args) != {"operation", "arguments"}:
+                    raise ValueError(
+                        "Action checkpoint coordinator unavailable or invalid arguments"
+                    )
+                payload = json.loads(args["arguments"])
+                if not isinstance(payload, dict):
+                    raise ValueError("Action arguments must be an object")
             required = "mode" if name == "observe" else "code"
-            if set(args) != {required} or not isinstance(args[required], str):
+            if name != "action" and (
+                set(args) != {required} or not isinstance(args[required], str)
+            ):
                 raise ValueError("Tool arguments do not match the strict schema")
             code = args.get("code", "")
             if len(code.encode()) > 65536:
@@ -120,7 +164,8 @@ class ToolExecutor:
             with locks.branch(self.branch):
                 if self.deadline is not None and time.monotonic() >= self.deadline:
                     raise TimeoutError("Run wall cap reached before tool execution")
-                pre = self._observe()
+                pre = self._observe("both")
+                local_before = pre.get("screenshot")
                 if self.gate is not None:
                     verdict = self.gate.check(
                         self.branch,
@@ -166,7 +211,14 @@ class ToolExecutor:
                         )
                 if self.deadline is not None and time.monotonic() >= self.deadline:
                     raise TimeoutError("Run wall cap reached before approved action")
-                if name.startswith("exec_"):
+                if name == "action":
+                    self.coordinator.ids = []
+                    result = self.coordinator.execute(
+                        args["operation"], payload, call.get("call_id")
+                    )
+                    action_ids = list(self.coordinator.ids)
+                    post = self._observe("both")
+                elif name.startswith("exec_"):
                     remaining = (
                         max(0.001, self.deadline - time.monotonic())
                         if self.deadline
@@ -177,11 +229,12 @@ class ToolExecutor:
                         **args,
                         timeout_ms=max(1, min(30000, int(remaining * 1000))),
                     )
-                    post = self._observe()
+                    post = self._observe("both")
                 else:
                     # A tree accompanies every model-visible observation, even screenshot-only requests.
                     post = self._observe("both" if args["mode"] != "tree" else "tree")
                     result = {"stdout": "", "value": None}
+                local_after = post.get("screenshot")
                 unchanged = name.startswith("exec_") and tree_hash(pre) == tree_hash(
                     post
                 )
@@ -193,7 +246,17 @@ class ToolExecutor:
                     screenshot = post.get("screenshot") or self._observe(
                         "screenshot"
                     ).get("screenshot")
-        except (ReplError, ValueError, PermissionError, TimeoutError) as exc:
+        except (
+            CheckpointFailure,
+            ReplError,
+            ValueError,
+            PermissionError,
+            TimeoutError,
+            RuntimeError,
+            OSError,
+        ) as exc:
+            if isinstance(exc, CheckpointFailure):
+                fatal_error = exc
             error = {
                 "name": type(exc).__name__,
                 "message": str(exc),
@@ -208,7 +271,15 @@ class ToolExecutor:
                     post = pre
             if isinstance(exc, ReplError):
                 screenshot = screenshot or exc.data.get("last_screenshot")
+        if self.coordinator:
+            action_ids = list(self.coordinator.ids)
         self.last_observation = post
+        local_paths = []
+        for index, value in enumerate(
+            [local_before, local_after or post.get("screenshot")], start=100
+        ):
+            if value:
+                local_paths.append(self.log.screenshot(value, step, index))
         images = ([screenshot] if screenshot else []) + result.get("images", [])
         paths = [
             self.log.screenshot(value, step, index)
@@ -236,7 +307,9 @@ class ToolExecutor:
             tree_sha_before=tree_hash(pre),
             tree_sha_after=tree_hash(post),
             screenshot=relative,
-            screenshots=paths,
+            screenshots=list(dict.fromkeys([*local_paths, *paths])),
+            action_ids=action_ids,
+            action_count=len(action_ids),
             tree_before=before_evidence,
             tree_after=after_evidence,
             tokens=None,
@@ -270,8 +343,11 @@ class ToolExecutor:
                     evidence={
                         "before": before_evidence,
                         "after": after_evidence,
-                        "coverage": "tool_level",
-                        "action_checkpoints": "unavailable",
+                        "coverage": "action_level" if action_ids else "tool_level",
+                        "action_checkpoints": "filesystem_partial"
+                        if action_ids
+                        else "unavailable",
+                        **({"action_ids": action_ids} if action_ids else {}),
                     },
                 )
         text = (
@@ -306,6 +382,8 @@ class ToolExecutor:
                 }
             )
         self.history.append({"tool": name, "url": post.get("url"), "error": error})
+        if fatal_error is not None:
+            raise fatal_error
         return {
             "type": "function_call_output",
             "call_id": call.get("call_id"),

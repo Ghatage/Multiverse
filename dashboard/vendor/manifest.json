@@ -216,5 +216,21 @@
       "license": "MIT",
       "integrity": "sha512-XPaBkWQJdsf3pLKJV9p4qN/S+fm2Oj8AIPo1BTUhg5oxkvm9+SVEGFdhyOz7tTdUTfvxMiAs4sp6/eZO2Ew+pw=="
     }
-  ]
+  ],
+  "bloom": {
+    "file": "unreal-bloom-0.186.0.min.js",
+    "sha256": "d7f3c348f89ea1032650f62905ee2844470d6548452253aefd11b35f9d46938a",
+    "three_version": "0.186.0",
+    "source": "https://github.com/mrdoob/three.js/blob/r186/examples/jsm/postprocessing/UnrealBloomPass.js",
+    "bundler": "esbuild 0.25.12",
+    "license": "MIT; Three.js license included in THIRD_PARTY_LICENSES.txt",
+    "settings": {
+      "strength": 0.7,
+      "radius": 0.65,
+      "threshold": 0.28,
+      "resolution_scale": 0.65,
+      "max_dimension": 960
+    },
+    "notes": "Prebundled addon; no runtime network or frontend build required. Bloom defaults off for reduced motion; user can toggle. Existing idle pause preserved."
+  }
 }

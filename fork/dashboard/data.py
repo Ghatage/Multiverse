@@ -497,7 +497,8 @@ class Reader:
                 "gap_after": endpoints[1] is None,
                 "edge_id": row.get("edge_id"),
                 "call_id": raw.get("call_id"),
-                "granularity": "tool_call",
+                "granularity": "action_and_tool_call",
+                "filesystem_recovery": True,
             }
             screenshots = raw.get("screenshots") or (
                 [raw["screenshot"]] if raw.get("screenshot") else []
@@ -584,7 +585,8 @@ class Reader:
         for ck in checkpoints.values():
             for key in ("tabs_json", "vars_json"):
                 ck.pop(key, None)
-            ck["restore_reason"] = "Verified recovery API is not implemented"
+            ck["filesystem_recovery_available"] = ck.get("status") == "committed" and bool(ck.get("image_digest"))
+            ck["restore_reason"] = "Partial filesystem recovery through an individual action" if ck["filesystem_recovery_available"] else "No verified action recovery point"
         branches = []
         for row in cu["branches"]:
             branch = dict(row)
@@ -654,7 +656,8 @@ class Reader:
             "warnings": sorted(set(warnings)),
             "capabilities": {
                 "recovery": False,
-                "granularity": "tool_call",
+                "granularity": "action_and_tool_call",
+                "filesystem_recovery": True,
                 "steering": True,
             },
         }

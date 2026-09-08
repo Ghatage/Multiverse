@@ -1,12 +1,34 @@
-/* Local execution explorer. Playback changes selection only; there is no restore/execution API. */
+/* Playback shows evidence; action recovery creates a separate desktop. */
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
   const palette = ['#b6a0e2', '#80bbb5', '#dea381', '#8eaddb', '#cb92b8', '#bdc787', '#c39cdf', '#7fb8d0'];
   const statusColors = {succeeded:'#87c9ad', failed:'#ef8f91', pending:'#d9b77c', unverified:'#8dadd5'};
+  const appColors = new Map();
+  function appName(node) { return node.app || 'Unknown app'; }
+  function appColor(node) {
+    const name=appName(node);
+    if(name==='Unknown app') return '#9298a8';
+    if(!appColors.has(name)) {
+      let hash=0; for(const char of name) hash=(Math.imul(hash,31)+char.charCodeAt(0))>>>0;
+      appColors.set(name,`hsl(${hash%360}, 62%, 70%)`);
+    }
+    return appColors.get(name);
+  }
+  function edgeColor(link) { return statusColors[link.status] || '#9298a8'; }
+  function renderAppLegend(nodes) {
+    const legend=clear($('app-legend'));
+    legend.append(el('b','','APPS'));
+    const apps=new Map(nodes.map(n=>[appName(n),n]));
+    for(const [name,node] of [...apps].sort(([a],[b])=>a.localeCompare(b))) {
+      const item=el('span','',name), dot=el('i');dot.style.background=appColor(node);item.prepend(dot);legend.append(item);
+    }
+    if(!apps.size) legend.append(el('span','','No recorded apps'));
+  }
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const state = {payload:null, branch:'', runFilter:'', selectedRun:null, selected:null, timeline:[], position:0, playing:false, grid:false, tab:'inspect', revision:null};
   const nodeCache = new Map(), linkCache = new Map(), desktopCache = new Map(), labelCache = new Map();
+  let bloomPass;
   let graph, initialFit = false, graphSignature = '', pollBusy = false, refreshQueued = false, inspectorRequest = 0;
   let pauseTimer, playbackTimer, toastTimer, source, pollTimer, resumeQueued=false;
   let runColors = new Map();
@@ -48,8 +70,11 @@
     for(const n of chosen) {
       if(!Number.isFinite(n.x)||!Number.isFinite(n.y)||!Number.isFinite(n.z)) continue;
       let label=labelCache.get(n.id);
-      if(!label) { label=el('span','node-label'); $('node-labels').append(label); labelCache.set(n.id,label); }
+      if(!label) { label=button('','node-label',()=>selectNode(n.id)); $('node-labels').append(label); labelCache.set(n.id,label); }
       label.textContent=shorten(n.title || n.url_pattern || n.id,25);
+      label.style.borderLeft=`3px solid ${appColor(n)}`;
+      label.title=`${appName(n)} · ${n.title || n.id}`;
+      label.setAttribute('aria-label',`View screen: ${n.title || n.id}`);
       const point=graph.graph2ScreenCoords(n.x,n.y,n.z);
       label.hidden=point.x<15 || point.x>width-150 || point.y<130 || point.y>height-45 || point.z>1;
       label.style.left=`${point.x}px`; label.style.top=`${point.y}px`;
@@ -74,11 +99,11 @@
     try {
       graph = new ForceGraph3D($('graph'), {controlType:'orbit', rendererConfig:{antialias:true,alpha:true,powerPreference:'low-power'}})
         .backgroundColor('#00000000').showNavInfo(false).nodeRelSize(4.4).nodeResolution(12).nodeOpacity(.96)
-        .nodeVal(n=>Math.min(4,1+n.occurrence_count*.1)).nodeLabel(n=>tooltip(`${n.title}\n${n.occurrence_count} recorded occurrences`))
+        .nodeVal(n=>Math.min(4,1+n.occurrence_count*.1)).nodeLabel(n=>tooltip(`${n.title}\n${appName(n)} · ${n.occurrence_count} recorded occurrences`))
         .linkLabel(l=>tooltip(`${runById(l.run_id)?.branch || l.run_id} · tool call ${l.index}\n${l.tool} · ${statusName(l.status)}`))
         .linkOpacity(.78).linkDirectionalArrowLength(3.3).linkDirectionalArrowRelPos(.77)
         .linkDirectionalArrowColor(l=>statusColors[l.status]).linkDirectionalParticles(0)
-        .linkDirectionalParticleWidth(2.5).linkDirectionalParticleSpeed(.014).linkDirectionalParticleColor(l=>runColor(l.run_id))
+        .linkDirectionalParticleWidth(2.5).linkDirectionalParticleSpeed(.014).linkDirectionalParticleColor(edgeColor)
         .linkCurvature(l=>l.curve).linkCurveRotation(l=>l.rotation).linkHoverPrecision(4)
         .cooldownTicks(0).warmupTicks(80).d3VelocityDecay(.5)
         .onNodeClick(n=>selectNode(n.id)).onLinkClick(l=>selectStep(l.id))
@@ -89,6 +114,17 @@
           labels(); wake(600);
         });
       graph.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1,1.5));
+      if(window.DashboardBloom) {
+        bloomPass=DashboardBloom.createBloom();
+        graph.postProcessingComposer().addPass(bloomPass);
+        bloomPass.enabled=!reduced;
+      }
+      const bloomButton=$('bloom-toggle');
+      const updateBloomButton=()=>{const enabled=Boolean(bloomPass?.enabled);bloomButton.setAttribute('aria-pressed',String(enabled));bloomButton.querySelector('span').textContent=enabled?'On':'Off';};
+      updateBloomButton();
+      bloomButton.disabled=!bloomPass;
+      bloomButton.addEventListener('click',()=>{if(!bloomPass)return;bloomPass.enabled=!bloomPass.enabled;updateBloomButton();wake(500);});
+
       graph.d3Force('charge').strength(-155);
       graph.d3Force('link').distance(75);
       graph.controls().addEventListener('change',()=>{labels();wake(350);});
@@ -109,18 +145,19 @@
   function refreshStyles() {
     if(!graph) return;
     graph.nodeColor(n=>{
-      if(state.selected?.type==='node'&&state.selected.id===n.id) return '#f2e5ff';
       if(state.selectedRun && !n.run_ids.includes(state.selectedRun)) return '#333747';
-      return n.run_ids.length===1 ? runColor(n.run_ids[0]) : '#d1c3e7';
-    }).linkColor(l=>selectedPath(l.run_id)?runColor(l.run_id):'#292b37')
+      return appColor(n);
+    }).nodeVal(n=>Math.min(4,1+n.occurrence_count*.1)*(state.selected?.type==='node'&&state.selected.id===n.id?1.5:1))
+      .linkColor(l=>selectedPath(l.run_id)?edgeColor(l):'#292b37')
       .linkWidth(l=>state.selected?.id===l.id?2.8:!selectedPath(l.run_id)?.3:l.status==='failed'?1.6:l.status==='succeeded'?1:.55)
-      .linkDirectionalArrowColor(l=>selectedPath(l.run_id)?statusColors[l.status]:'#373744');
+      .linkDirectionalArrowColor(l=>selectedPath(l.run_id)?edgeColor(l):'#373744');
     labels();wake(400);
   }
   function renderGraph(newIds=[]) {
     const steps=visibleSteps(), ids=new Set(steps.flatMap(s=>[s.from,s.to]).filter(Boolean));
     const rawNodes=state.payload.graph.nodes.filter(n=>ids.has(n.id));
     const rawLinks=steps.filter(s=>s.from&&s.to);
+    renderAppLegend(rawNodes);
     $('graph-summary').textContent=`${rawNodes.length} states · ${steps.length} tool calls · ${steps.filter(s=>s.gap_before||s.gap_after).length} gaps`;
     if(graph) {
       $('graph-empty').hidden=rawNodes.length>0;
@@ -215,8 +252,8 @@
     inspectorRequest++;state.selected=null;
     const box=clear($('inspect-content'));
     append(box,el('div','eyebrow','PATH INSPECTOR'),el('div','inspector-symbol','⋈'),el('h2','','Follow a path.'),el('p','inspector-intro','Select a run to highlight its ordered execution. Choose a state or connection to inspect what was recorded.'),el('div','info-note','Paths share normalized UI states. Each connection keeps its own run and tool-call identity.'));
-    append(box,detailsGrid([['Graph nodes','Normalized UI states'],['Connections','Recorded tool calls'],['Playback','Visual evidence only'],['Recovery','Unavailable']]));
-    const disabled=button('Restore unavailable','button restore-button',()=>{});disabled.disabled=true;box.append(disabled);
+    append(box,detailsGrid([['Graph nodes','Normalized UI states'],['Connections','Recorded tool calls'],['Playback','Visual evidence only'],['Recovery','Branch from individual actions (saved state)']]));
+
   }
   function renderRunInspector(r) {
     const box=clear($('inspect-content'));append(box,el('div','eyebrow','RECORDED RUN'),el('h2','',r.branch),el('p','muted small',r.id),append(el('div','status-line'),pill(r.status),pill(r.synthetic?'Synthetic':r.usage_source,r.synthetic?'synthetic':r.usage_source)));
@@ -236,8 +273,8 @@
       const row=el('div','checkpoint-row');append(row,el('div','mono',c.id),el('div','',c.label||c.status||'Filesystem checkpoint'),el('div','muted small',c.fidelity?.overall||'Restore fidelity not recorded'));
       if(c.commit_ms!==undefined)row.append(el('div','muted small',`${numeric(c.commit_ms)} ms commit`));box.append(row);
     }
-    const disabled=button('Restore unavailable','button restore-button',()=>{});disabled.disabled=true;box.append(disabled);
-    box.append(el('p','info-note','Checkpoint metadata is inspectable. A verified recovery API is not available; timeline playback never restores a desktop.'));
+
+    box.append(el('p','info-note','Checkpoint metadata is inspectable. Use an individual action’s Branch button to restore saved filesystem state. Timeline playback shows recorded screenshots.'));
   }
   function selectRun(id) {
     pause();state.position=0;state.selectedRun=id;state.selected={type:'run',id};showInspect();renderRuns();renderGraph();setTimeline();renderEvents();
@@ -248,10 +285,32 @@
     const request=++inspectorRequest;
     try {
       const response=await fetch(`/api/nodes/${encodeURIComponent(id)}`);if(!response.ok)throw new Error('State evidence unavailable');const n=await response.json();if(request!==inspectorRequest||state.selected?.id!==id)return;
-      const box=clear($('inspect-content'));append(box,el('div','eyebrow','NORMALIZED UI STATE'),el('h2','',n.title||'UI state'),el('p','mono muted',n.id),detailsGrid([['Application',n.app],['URL pattern',n.url_pattern],['Occurrences',n.occurrences.length],['Runs',n.run_ids.length]]));
-      box.append(el('p','info-note','Normalization removes some values for UI matching. This node does not certify exact desktop recovery.'));
-      box.append(el('h3','','Recorded occurrences'));
-      for(const sid of n.occurrences) {const s=state.payload.graph.occurrences.find(s=>s.id===sid);if(!s)continue;const b=button(`${s.branch} · call ${s.index}`,'occurrence-button',()=>selectStep(s.id));append(b,el('span','',`${s.tool} · ${statusName(s.status)}`));box.append(b);}
+      const box=clear($('inspect-content'));
+      append(box,el('div','eyebrow','SCREEN DETAILS'),el('h2','',n.title||'Recorded screen'),el('p','inspector-intro',`This screen belongs to ${n.app || 'an unknown app'}. Below is what happened around it.`));
+      append(box,el('p','muted small',`${n.occurrences.length} related steps across ${n.run_ids.length} recording${n.run_ids.length===1?'':'s'}. Latest first.`));
+      const visits=n.occurrences.map(sid=>state.payload.graph.occurrences.find(step=>step.id===sid)).filter(Boolean).sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))||b.index-a.index);
+      const list=el('div','screen-visits');box.append(list);
+      let loaded=0;
+      const more=button('Show earlier steps','button secondary',loadVisits);
+      async function loadVisits() {
+        more.disabled=true;
+        const batch=visits.slice(loaded,loaded+4);loaded+=batch.length;
+        const slots=batch.map(step=>{const slot=el('article','visit-card');slot.append(el('p','muted small',`Loading step ${step.index}…`));list.append(slot);return slot;});
+        await Promise.all(batch.map(async(step,i)=>{
+          try {
+            const result=await fetch(`/api/runs/${encodeURIComponent(step.run_id)}/steps/${step.index}`);
+            if(!result.ok)throw new Error('Details unavailable for this step.');
+            const detail=await result.json();if(request!==inspectorRequest)return;
+            clear(slots[i]);renderStepStory(slots[i],detail,n.id);
+          } catch(error) {if(request===inspectorRequest)slots[i].textContent=error.message;}
+        }));
+        more.disabled=false;more.hidden=loaded>=visits.length;
+      }
+      box.append(more);
+      const technical=el('details','details-section');technical.append(el('summary','','Screen technical details'));
+      technical.append(detailsGrid([['Screen ID',n.id],['Page',n.url_pattern]]));
+      technical.append(el('p','muted small','Similar screens are grouped together. A saved image belongs to its recorded step, not every visit to this screen.'));
+      box.append(technical);await loadVisits();
     } catch(error) {if(request===inspectorRequest)clear($('inspect-content')).append(el('p','info-note',error.message));}
   }
   function evidenceCards(box,items) {
@@ -265,6 +324,62 @@
       box.append(card);
     }
   }
+  function actionStory(box,a) {
+    const card=el('section','action-story');
+    append(card,el('h3','',`${a.operation} · ${a.outcome}`),el('p','muted small',`Recovery point: ${a.checkpoint_status}`));
+    for(const side of ['pre','post']) {
+      const section=el('div','action-boundary');section.append(el('h4','',side==='pre'?'Before action':'After action'));
+      evidenceCards(section,(a[`${side}_evidence`]||[]).filter(p=>p.mime?.startsWith('image/')));
+      const ck=state.payload.checkpoints.find(c=>c.id===a[`${side}_checkpoint_id`]);
+      if(ck?.status==='committed') {
+        const status=el('p','muted small');
+        const restore=button(`Branch from ${side==='pre'?'before':'after'}`,'small-button',async()=>{
+          restore.disabled=true;status.textContent='Restoring saved state into a new desktop…';
+          const name=`replay-${Date.now().toString(36)}-${side}`;
+          try {
+            const response=await fetch(`/api/actions/${encodeURIComponent(a.id)}/recover`,{method:'POST',headers:{'content-type':'application/json','x-fork-dashboard':'1'},body:JSON.stringify({side,name})});
+            const result=await response.json();if(!response.ok)throw new Error(result.detail||'Recovery failed');
+            status.textContent=`${name}: ${result.verification.message} Active page ${result.verification.active_browser_url.matched?'verified':'did not match'}.`;
+            const link=el('a','','Open restored desktop');link.href=result.viewer_url;link.target='_blank';link.rel='noopener';section.append(link);
+          }catch(error){status.textContent=error.message;}finally{restore.disabled=false;}
+        });
+        append(section,restore,status);
+      }
+      card.append(section);
+    }
+    card.append(el('p','info-note','Branching restores saved filesystem state. Unsaved app memory is unsupported. The current desktop is preserved.'));
+    box.append(card);
+  }
+  function renderStepStory(box,s,nodeId=null) {
+    const from=state.payload.graph.nodes.find(n=>n.id===s.from), to=state.payload.graph.nodes.find(n=>n.id===s.to);
+    const relation=nodeId?(s.from===nodeId&&s.to===nodeId?'Stayed on this screen':s.to===nodeId?'Arrived at this screen':'Acted from this screen'):'Recorded step';
+    append(box,el('div','eyebrow',relation),el('h3','story-title',`Step ${s.index} · ${s.branch}`));
+    const outcome={succeeded:'The task check passed.',failed:'This step reported an error.',pending:'The call started. No result has been recorded yet.',unverified:'This step was recorded, but success has not been checked.'};
+    box.append(el('p',`story-outcome ${s.status}`,outcome[s.status]||'Outcome not recorded.'));
+    box.append(el('p','story-route',`${from?.title || 'Earlier screen not recorded'} → ${to?.title || 'Next screen not recorded'}`));
+    const actions=s.actions||[];
+    if(actions.length)box.append(el('p','inspector-intro',`Recorded actions: ${actions.map(a=>a.operation).join(', ')}`));
+    else box.append(el('p','muted small',`Used ${s.tool==='exec_js'?'a browser script':s.tool==='exec_py'?'a desktop script':s.tool}. Individual actions were not separately recorded.`));
+    for(const action of actions)actionStory(box,action);
+    const proofs=actions.length?[]:[...(s.evidence||[])];
+    const seen=new Set();const images=proofs.filter(p=>p.available&&p.mime?.startsWith('image/')&&!seen.has(p.url)&&seen.add(p.url));
+    if(images.length) {
+      box.append(el('h3','','Saved screenshots'));
+      for(const proof of images) {
+        const figure=el('figure','story-screenshot'),img=el('img');img.src=proof.url;img.alt=proof.label||'Recorded screenshot';img.loading='lazy';
+        img.addEventListener('error',()=>{img.remove();figure.append(el('p','muted small','This screenshot is no longer available.'));});
+        append(figure,img,el('figcaption','',proof.label||'Screenshot recorded during this step'));box.append(figure);
+      }
+    } else if(!actions.length)box.append(el('p','info-note','No screenshot was saved for this step.'));
+    if(s.error)box.append(el('p','story-outcome failed',typeof s.error==='string'?s.error:(s.error.message||JSON.stringify(s.error))));
+    const technical=el('details','details-section');technical.append(el('summary','','Code & recording details'));
+    technical.append(el('pre','code',s.code||'No code recorded.'));
+    technical.append(detailsGrid([['Recorded',clock(s.ts)],['Run ID',s.run_id],['Duration',s.exec_ms==null?'Unknown':`${numeric(s.exec_ms)} ms`]]));
+    evidenceCards(technical,proofs.filter(p=>!p.mime?.startsWith('image/')));
+    for(const a of actions){const detail=el('details','details-section');detail.append(el('summary','',`${a.operation} · ${a.outcome}`));detail.append(el('pre','code',JSON.stringify(a.arguments,null,2)));technical.append(detail);}
+    showCheckpoints(technical,s.branch,actions.flatMap(a=>[a.pre_checkpoint_id,a.post_checkpoint_id]).filter(Boolean));
+    box.append(technical);
+  }
   async function selectStep(id,{playback=false}={}) {
     if(!playback) pause();
     state.selected={type:'step',id};showInspect();
@@ -276,17 +391,7 @@
     try {
       const response=await fetch(`/api/runs/${encodeURIComponent(occurrence.run_id)}/steps/${occurrence.index}`);if(!response.ok)throw new Error('This recorded call is unavailable');const s=await response.json();if(request!==inspectorRequest||state.selected?.id!==id)return;
       const box=clear($('inspect-content'));
-      append(box,el('div','eyebrow','RECORDED TOOL CALL'),el('h2','',`${s.tool}`),append(el('div','status-line'),pill(statusName(s.status),s.status),pill(`Call ${s.index}`)),el('p','muted small',s.branch));
-      append(box,detailsGrid([['Run',s.run_id],['Recorded',clock(s.ts)],['Execution',s.exec_ms===null?'Unavailable':`${numeric(s.exec_ms)} ms`],['Verification',s.verification==='task_checker'?'Whole-task checker':'Unverified'],['Source',runById(s.run_id)?.usage_source==='scripted'?'Scripted':s.execution_source],['Granularity','Tool call']]));
-      if(s.gap_before||s.gap_after||s.continuity_gap)box.append(el('p','info-note',`${s.gap_before?'Before observation is missing. ':''}${s.gap_after?'After observation is missing. ':''}${s.continuity_gap?'A gap separates this call from the preceding recorded state. ':''}No state or connecting transition is inferred.`));
-      if(s.error)box.append(el('pre','code',typeof s.error==='string'?s.error:JSON.stringify(s.error,null,2)));
-      box.append(el('h3','','Recorded code'));box.append(el('pre','code',s.code||'No code was recorded.'));
-      box.append(el('h3','','Evidence'));evidenceCards(box,s.evidence);
-      const actions=s.actions||[];
-      box.append(el('h3','',`Individual actions · ${actions.length}`));
-      if(!actions.length)box.append(el('p','muted small','Individual action boundaries were not recorded. This call may contain several actions.'));
-      for(const a of actions) {const section=el('details','details-section');section.append(el('summary','',`${a.sequence+1}. ${a.operation} · ${a.outcome}`));section.append(el('pre','code',JSON.stringify(a.arguments,null,2)));section.append(el('p','muted small',`Checkpoint ${a.checkpoint_status}`));evidenceCards(section,[...a.pre_evidence,...a.post_evidence]);box.append(section);}
-      showCheckpoints(box,s.branch,actions.flatMap(a=>[a.pre_checkpoint_id,a.post_checkpoint_id]).filter(Boolean));
+      renderStepStory(box,s);
     } catch(error) {if(request===inspectorRequest)clear($('inspect-content')).append(el('p','info-note',error.message));}
   }
   function renderEvents() {

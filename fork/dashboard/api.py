@@ -45,6 +45,12 @@ def filtered(payload, run_id=None, branch=None):
     }
 
 
+class Recovery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    side: str
+    name: str = Field(pattern=r"^[a-z0-9-]{1,32}$")
+
+
 class Steering(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str = Field(min_length=1, max_length=16384)
@@ -224,6 +230,25 @@ def create_app(settings=None):
         except OSError:
             raise HTTPException(503, "Steering channel unavailable") from None
         return {"queued": True, **item}
+
+    @app.post("/api/actions/{action_id}/recover")
+    def recover_action(action_id: str, body: Recovery):
+        if settings.data.resolve() != data_dir():
+            raise HTTPException(
+                409, "Recovery is unavailable for an alternate recording directory"
+            )
+        from fork.recovery import recover
+        from fork.store.db import Store
+
+        try:
+            return recover(
+                Store(settings.data / "traj.db", artifact_root=settings.runs),
+                action_id,
+                body.side,
+                body.name,
+            )
+        except (ValueError, RuntimeError, OSError) as exc:
+            raise HTTPException(409, str(exc)) from None
 
     @app.get("/api/history")
     def history(run_id: str | None = None, branch: str | None = None):

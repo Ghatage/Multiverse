@@ -11,12 +11,13 @@ from pathlib import Path
 
 import httpx
 
+from fork.actions import CheckpointFailure
 from fork.agent.judge import JUDGE_TOOL, JudgePool
 from fork.agent.log import RunLogger
 from fork.agent.policy import Caps, ObservationPolicy
-from fork.agent.prompts import SYSTEM
+from fork.agent.prompts import ACTION_SYSTEM, SYSTEM
 from fork.agent.steer import SteerChannel
-from fork.agent.tools import TOOLS, ToolExecutor
+from fork.agent.tools import ACTION_TOOLS, TOOLS, ToolExecutor
 from fork.agent.transport import TransportError, WallTimeout, WsTransport
 from fork.cu import db
 from fork.locks import validate_name
@@ -120,6 +121,8 @@ def run_task(
     deadline = log.started + caps.max_wall_s
     container_id = None
     owns_repl = repl is None
+    checkpointed = owns_repl and repl_url is None
+    model_tools = ACTION_TOOLS if checkpointed else TOOLS
     text, error = "", None
     reason = "error"
     executor = None
@@ -255,9 +258,11 @@ def run_task(
             "model": "gpt-6-astra",
             "stream_id": branch,
             "store": False,
-            "instructions": SYSTEM
+            "instructions": (ACTION_SYSTEM if checkpointed else SYSTEM)
             + ("\n" + extra_instructions if extra_instructions else ""),
-            "tools": [] if summarize else [*TOOLS, *([JUDGE_TOOL] if judge else [])],
+            "tools": []
+            if summarize
+            else [*model_tools, *([JUDGE_TOOL] if judge else [])],
             "tool_choice": "none" if summarize else "auto",
             "parallel_tool_calls": False,
             "reasoning": {"effort": "low" if summarize else effort, "summary": "auto"},
@@ -278,6 +283,10 @@ def run_task(
                     repl_url = f"http://localhost:{state.ports['repl']}"
                 repl = ReplClient(repl_url, timeout_s=min(60, caps.max_wall_s))
             budget()
+            if checkpointed and repl.health().get("action_protocol") != 1:
+                raise RuntimeError(
+                    "This desktop predates action checkpoints. Create a branch from an updated runtime image before running the agent."
+                )
             (log.path / "task.json").write_text(json.dumps(task, indent=2) + "\n")
             if store is not False:
                 from fork.store.db import Store
@@ -294,6 +303,7 @@ def run_task(
                 task["prompt"],
                 deadline,
                 store=store if store is not False else None,
+                checkpointed=checkpointed,
             )
             initial = executor.execute(
                 {
@@ -302,12 +312,18 @@ def run_task(
                     "arguments": '{"mode":"both"}',
                 }
                 if resume
-                else
-                {
-                    "name": "exec_js",
+                else {
+                    "name": "action" if checkpointed else "exec_js",
                     "call_id": "bootstrap",
                     "arguments": json.dumps(
-                        {"code": f"await page.goto({json.dumps(task['start_url'])})"}
+                        {
+                            "operation": "goto",
+                            "arguments": json.dumps({"url": task["start_url"]}),
+                        }
+                        if checkpointed
+                        else {
+                            "code": f"await page.goto({json.dumps(task['start_url'])})"
+                        }
                     ),
                 }
             )
@@ -538,6 +554,7 @@ def run_task(
     except StopRun as exc:
         reason = exc.reason
     except (
+        CheckpointFailure,
         ValueError,
         RuntimeError,
         OSError,

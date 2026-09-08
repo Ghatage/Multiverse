@@ -67,6 +67,70 @@ def atspi_tree(max_depth=12, max_chars=20000):
     return text
 
 
+def inventory():
+    lines, apps, complete = [], [], True
+    count = 0
+
+    def walk(node, depth):
+        nonlocal count, complete
+        count += 1
+        if count > 50000 or depth > 80:
+            complete = False
+            return
+        try:
+            lines.append(" " * depth + f'{node.getRoleName()} "{node.name}"')
+            for child in node:
+                walk(child, depth + 1)
+        except Exception as exc:  # noqa: BLE001 - AT-SPI nodes can disappear
+            complete = False
+            lines.append(f"unavailable: {type(exc).__name__}")
+
+    for app in pyatspi.Registry.getDesktop(0):
+        try:
+            apps.append(
+                {
+                    "name": app.name,
+                    "pid": app.get_process_id(),
+                    "restore": "unsupported",
+                }
+            )
+            walk(app, 0)
+        except Exception:  # noqa: BLE001 - inventory records inaccessible apps
+            complete = False
+    try:
+        windows = subprocess.check_output(["wmctrl", "-lpG"], text=True)
+    except (OSError, subprocess.CalledProcessError):
+        windows = None
+        complete = False
+    return {
+        "tree": {"text": "\n".join(lines), "complete": complete},
+        "inventory": {
+            "apps": apps,
+            "windows": windows,
+            "focus": active_window(),
+            "pointer": list(pyautogui.position()),
+            "complete": complete,
+        },
+    }
+
+
+def action(value):
+    p, op = value["arguments"], value["operation"]
+    if op == "desktop_click":
+        pyautogui.click(p["x"], p["y"])
+    elif op == "desktop_type":
+        pyautogui.write(p["text"], interval=0.01)
+    elif op == "desktop_press":
+        pyautogui.press(p["key"])
+    elif op == "desktop_hotkey":
+        pyautogui.hotkey(*p["keys"])
+    elif op == "desktop_scroll":
+        pyautogui.scroll(p["amount"])
+    else:
+        raise ValueError("Unsupported desktop action")
+    return {"operation": op}
+
+
 globals_ = {
     "pyautogui": pyautogui,
     "time": time,
@@ -124,6 +188,10 @@ for line in sys.stdin:
                 result = active_window()
             elif method == "atspi_tree":
                 result = atspi_tree(**params)
+            elif method == "inventory":
+                result = inventory()
+            elif method == "action":
+                result = action(params)
             elif method == "screenshot":
                 display(pyautogui.screenshot())
                 result = images[-1]

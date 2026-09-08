@@ -6,6 +6,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath fill='none' stroke='%23b9acd9' stroke-width='3' d='M10 30V12m0 10 20-10M10 22l20 8'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/assets/style.css">
   <script defer src="/assets/vendor/3d-force-graph-1.80.0.min.js"></script>
+  <script defer src="/assets/vendor/unreal-bloom-0.186.0.min.js"></script>
   <script defer src="/assets/app.js"></script>
 </head>
 <body>
@@ -23,16 +24,16 @@
       <select id="run-filter"><option value="">All runs</option></select>
       <button id="clear-selection" class="text-button">Show all paths <span>↗</span></button>
       <div id="run-list" class="run-list" aria-label="Recorded runs"></div>
-      <div class="sidebar-foot"><span class="eyebrow">RECORDING LEVEL</span><p>Tool calls <span class="subtle">+ recorded actions</span></p><p class="muted small">One tool call can contain several actions.</p></div>
+      <div class="sidebar-foot"><span class="eyebrow">RECORDING LEVEL</span><p>Tool calls <span class="subtle">+ recorded actions</span></p><p class="muted small">New runs record one action per call. Older scripts may contain several.</p></div>
     </aside>
     <section class="center">
       <div class="metrics" id="metrics" aria-label="Recording metrics"></div>
       <section class="graph-panel" aria-label="Interactive three dimensional execution graph">
-        <div class="graph-heading"><div><div class="eyebrow">LIVE EXECUTION MAP <span class="mini-badge">3D</span></div><h1>Execution space</h1><p id="graph-summary">Waiting for recordings</p></div><div class="graph-actions"><button class="icon-button" id="fit" title="Fit graph to view" aria-label="Fit graph to view">⛶</button><button class="icon-button" id="reset-camera" title="Reset camera" aria-label="Reset camera">↺</button></div></div>
+        <div class="graph-heading"><div><div class="eyebrow">LIVE EXECUTION MAP <span class="mini-badge">3D</span></div><h1>Execution space</h1><p id="graph-summary">Waiting for recordings</p></div><div class="graph-actions"><button id="bloom-toggle" class="bloom-button" type="button" aria-pressed="true" title="Toggle soft bloom lighting">Glow <span>On</span></button><button class="icon-button" id="fit" title="Fit graph to view" aria-label="Fit graph to view">⛶</button><button class="icon-button" id="reset-camera" title="Reset camera" aria-label="Reset camera">↺</button></div></div>
         <div id="graph" tabindex="0" aria-label="3D graph. Drag to orbit, scroll to zoom, right-drag to pan. Select runs or timeline entries to inspect without a mouse."></div>
         <div id="node-labels" aria-hidden="true"></div>
         <div id="graph-empty" class="graph-empty" hidden><div class="empty-symbol">⋈</div><h2>No recorded states yet</h2><p>Run history appears here when observations are available.</p><p class="small" id="empty-detail"></p></div>
-        <div class="graph-bottom"><div class="legend" aria-label="Transition status legend"><span><i class="succeeded"></i>Verified</span><span><i class="failed"></i>Failed</span><span><i class="pending"></i>Pending</span><span><i class="unverified"></i>Unverified</span><span><i class="gap"></i>Gap</span></div><span class="navigation-hint">Drag orbit · Scroll zoom · Right-drag pan</span></div>
+        <div class="graph-bottom"><div class="graph-legends"><div id="app-legend" class="legend" aria-label="Node app colors"></div><div class="legend edge-legend" aria-label="Transition status legend"><b>CALLS</b><span><i class="succeeded"></i>Verified</span><span><i class="failed"></i>Failed</span><span><i class="pending"></i>Pending</span><span><i class="unverified"></i>Unverified</span><span><i class="gap"></i>Gap</span></div></div><span class="navigation-hint">Drag orbit · Scroll zoom · Right-drag pan</span></div>
       </section>
       <section class="timeline" aria-label="Recorded evidence playback">
         <div class="timeline-heading"><span class="eyebrow">PATH TIMELINE</span><span id="timeline-caption">All recorded tool calls</span><span class="playback-note">Visual playback only</span></div>

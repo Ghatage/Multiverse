@@ -97,6 +97,12 @@ def ingest_run(
                     "coverage": "tool_level",
                     "action_checkpoints": "unavailable",
                 }
+                if record.get("action_ids"):
+                    proof.update(
+                        coverage="action_level",
+                        action_checkpoints="filesystem_partial",
+                        action_ids=record["action_ids"],
+                    )
                 old_step = con.execute(
                     "SELECT * FROM steps WHERE run_id=? AND idx=?",
                     (run_id, record["step"]),
@@ -130,7 +136,7 @@ def ingest_run(
                     a = store.node_for(before)[0] if before else None
                     b = store.node_for(after)[0] if after else None
                 actions = _call_actions(con, run_id, record)
-                if record.get("tool") in {"exec_js", "exec_py"}:
+                if record.get("tool") in {"exec_js", "exec_py", "action"}:
                     mutations += 1
                     covered += actions is not None
                 if actions is not None:
@@ -264,7 +270,7 @@ def _import_actions(store, records, run_id, branch):
 
 
 def _call_actions(con, run_id, record):
-    count = record.get("action_count")
+    count = record.get("action_count", len(record.get("action_ids", [])))
     if type(count) is not int or count < 1:
         return None
     actions = con.execute(
