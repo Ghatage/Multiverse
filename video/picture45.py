@@ -4,14 +4,14 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-OUT = ROOT / "output/picture45-live"
+OUT = ROOT / "output/picture45-apps"
 OPENING = ROOT / "output/v3-opening/Multiverse-opening-v3.mp4"
 PREVIOUS = ROOT / "output/v2-silent.mp4"
-BROLL = Path.home() / "Downloads/multiverse-broll/building"
+BROLL = Path.home() / "Downloads/multiverse-broll"
 REQUEST = ROOT / "assets/v3/request-actions.mp4"
 GRAPH = ROOT / "assets/live-graph-v2/dashboard-live.webm"
 WALL = Path.home() / "Downloads/multiverse-tv-wall-10s.mp4"
-DESTINATION = Path.home() / "Downloads/Multiverse-45s-picture-v5.mp4"
+DESTINATION = Path.home() / "Downloads/Multiverse-45s-picture-v6.mp4"
 
 # The supplied wall is an editorial closing montage, not a concurrency metric.
 # Existing large narration captions are removed from the earlier picture source.
@@ -23,8 +23,8 @@ SHOTS = [
     (GRAPH, 22, 8, "null"),
     (PREVIOUS, 38, 3, "crop=1920:914:0:0,pad=1920:1080:0:0:color=0x0b0d13"),
     (PREVIOUS, 46, 4, "crop=1920:914:0:0,pad=1920:1080:0:0:color=0x0b0d13"),
-    (BROLL / "01-multiverse-build-canvas.mp4", 1, 2.5, "null"),
-    (BROLL / "02-astra-terminal-closeup.mp4", 1, 2.5, "null"),
+    (BROLL / "calc/03-format-sort.mp4", 8, 2.5, "crop=1280:720:0:0,scale=1920:1080"),
+    (BROLL / "inkscape/01-geometric.mp4", 11, 2.5, "crop=1440:810:240:70,scale=1920:1080"),
     (WALL, 0, 10, "null"),
 ]
 
@@ -36,9 +36,10 @@ def run(*args):
 def render():
     OUT.mkdir(parents=True, exist_ok=True)
     for i, (source, start, duration, crop) in enumerate(SHOTS):
-        cached_wall = ROOT / "output/picture45-tight/shot-9.mp4"
-        if source == WALL and cached_wall.exists():
-            shutil.copyfile(cached_wall, OUT / f"shot-{i}.mp4")
+        # These shots are unchanged from the preceding cut.
+        cached = ROOT / f"output/picture45-live/shot-{i}.mp4"
+        if i not in (7, 8) and cached.exists():
+            shutil.copyfile(cached, OUT / f"shot-{i}.mp4")
             continue
         run("-ss", start, "-i", source, "-t", duration, "-an", "-vf",
             f"{crop},fps=30,setsar=1,setpts=PTS-STARTPTS", "-c:v", "libx264",
